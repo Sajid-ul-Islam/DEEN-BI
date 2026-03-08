@@ -20,6 +20,8 @@ from app_modules.wp_processor import WhatsAppOrderProcessor
 from app_modules.error_handler import log_error, get_logs
 from app_modules.persistence import init_state, save_state
 from app_modules.sales_dashboard import render_live_tab, render_manual_tab
+from app_modules.ai_chat import render_ai_chat_tab
+from app_modules.whatsapp_api import render_whatsapp_api_tab
 import core as inv_core
 
 # --- Page Configuration ---
@@ -33,7 +35,7 @@ st.set_page_config(
 # --- Initialize State & Persistence ---
 init_state()
 
-# --- Premium Global CSS ---
+# --- Premium native CSS for Dark/Light Mode ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
@@ -41,13 +43,10 @@ st.markdown("""
         --primary: #4e73df;
         --secondary: #1e3a8a;
         --accent: #10b981;
-        --bg: #f8fafc;
-        --card-bg: rgba(255, 255, 255, 0.85);
     }
     * { font-family: 'Outfit', sans-serif; }
-    .stApp { background: linear-gradient(135deg, #f0f4ff 0%, #f8fafc 100%); }
-
-    /* Keyframes */
+    
+    /* Animations */
     @keyframes moveFullScreen {
         0%   { transform: translateX(250px) scale(1); opacity: 0; }
         10%  { opacity: 1; }
@@ -73,31 +72,22 @@ st.markdown("""
         display: flex;
         align-items: center;
         animation: moveFullScreen 18s linear infinite;
-        filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1));
+        filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3));
     }
     .bike-img { width: 55px; z-index: 10000; display: block; }
-    .smoke-trail {
-        display: flex;
-        margin-left: -5px; /* Positioned behind the bike */
-    }
+    .smoke-trail { display: flex; margin-left: -5px; }
     .smoke {
-        width: 12px;
-        height: 12px;
-        background: #cbd5e1;
-        border-radius: 50%;
-        animation: smoke-puff 0.8s ease-out infinite;
-        margin-left: -6px;
+        width: 12px; height: 12px; background: #64748b; border-radius: 50%;
+        animation: smoke-puff 0.8s ease-out infinite; margin-left: -6px;
     }
     .smoke:nth-child(2) { animation-delay: 0.2s; }
     .smoke:nth-child(3) { animation-delay: 0.4s; }
 
     .glass-card {
-        background: var(--card-bg);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.4);
+        background: var(--card-bg, rgba(255,255,255,0.05));
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 16px;
         padding: 24px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
         margin-bottom: 20px;
     }
 
@@ -106,13 +96,12 @@ st.markdown("""
         border: 2px solid #ef4444 !important;
     }
 
-    .stTabs [data-baseweb="tab-list"] { gap: 12px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
-        height: 52px;
-        border-radius: 12px 12px 0 0;
-        padding: 0 24px;
+        height: 48px;
+        border-radius: 8px 8px 0 0;
+        padding: 0 16px;
         font-weight: 600;
-        background: white;
     }
     .stTabs [aria-selected="true"] { background: var(--primary) !important; color: white !important; }
     </style>
@@ -128,19 +117,32 @@ st.markdown("""
             <div class="smoke"></div>
         </div>
     </div>
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 0; border-bottom:2px solid rgba(78,115,223,0.1);">
-        <h1 style="margin:0; font-weight:700; color:#1e3a8a;">Automation Hub <span style="color:#4e73df;">Pro v7.0</span></h1>
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 0; border-bottom:2px solid rgba(78,115,223,0.3);">
+        <h1 style="margin:0; font-weight:700;"><span style="color:var(--primary);">Automation Hub</span> Pro v8</h1>
     </div>
     """, unsafe_allow_html=True)
 
+# --- Global Sidebar Configuration ---
+with st.sidebar:
+    st.image("https://cdn-icons-png.flaticon.com/512/2830/2830305.png", width=60)
+    st.markdown("### ⚙️ Global Settings")
+    st.session_state.low_stock_threshold = st.number_input("Safety Stock Level", value=st.session_state.get('low_stock_threshold', 5))
+    search_q = st.text_input("🔍 Matrix SKU / Name Filter", key="inv_matrix_search")
+    
+    st.divider()
+    if st.button("💾 Force Save State", use_container_width=True):
+        save_state()
+        st.toast("✅ State manually saved to browser storage!")
+
 # --- Tabs ---
-t_sales_live, t_sales_manual, t_order, t_inv, t_wp, t_logs = st.tabs([
+t_sales_live, t_sales_manual, t_order, t_inv, t_wp, t_logs, t_dev_lab = st.tabs([
     "💰 Live Dashboard", 
     "📁 Manual Dashboard", 
     "📦 Pathao Processor", 
     "🏢 Distribution Hub", 
     "💬 WP Verification", 
-    "🛠️ System Logs"
+    "🛠️ System Logs",
+    "🧪 Dev Lab"
 ])
 
 
@@ -167,22 +169,31 @@ with t_order:
     
     if up_pathao:
         try:
-            with st.spinner("🚀 Processing Orders..."):
+            with st.status("🚀 Processing Pathao Orders...", expanded=True) as status:
+                st.write("📂 Reading input file...")
                 df = pd.read_csv(up_pathao) if up_pathao.name.endswith('.csv') else pd.read_excel(up_pathao)
+                time.sleep(0.5) # smooth animation pacing
+                
+                st.write("🔍 Formatting fuzzy addresses...")
                 res_df = process_orders_dataframe(df)
                 st.session_state.pathao_res_df = res_df
                 save_state()
+                
+                status.update(label="✅ Success! Processing complete.", state="complete", expanded=False)
 
-            st.dataframe(res_df, use_container_width=True)
+            with st.expander("👀 View Raw Output Data", expanded=False):
+                st.dataframe(res_df, use_container_width=True)
             
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='openpyxl') as wr:
                 res_df.to_excel(wr, index=False)
-            st.download_button("📥 Download Repaired Pathao Data", buf.getvalue(), "Pathao_Final.xlsx")
+                
+            st.download_button("📥 Download Repaired Pathao Data", buf.getvalue(), "Pathao_Final.xlsx", type="primary")
+            st.toast("✅ Finished Pathao processing")
             
         except Exception as e:
             log_error(e, context="Pathao Processor")
-            st.error("Error in Pathao processing.")
+            st.toast("❌ Error in Pathao processing.")
 
 # ---------------------------------------------------------
 # TAB 2: DISTRIBUTION MATRIX (With Low Stock Alerts)
@@ -199,33 +210,25 @@ with t_inv:
         # 🏪 Global Outlet Configuration
         locs = ["Ecom", "Mirpur", "Wari", "Cumilla", "Sylhet"]
 
-        c_m, c_p = st.columns([3, 1])
-        with c_p:
-            st.markdown("#### ⚙️ Thresholds")
-            st.session_state.low_stock_threshold = st.number_input("Safety Stock Level", value=st.session_state.get('low_stock_threshold', 5))
-            search_q = st.text_input("🔍 Search SKU / Name", key="inv_matrix_search")
-            if st.button("Save State 💾"): save_state()
-
-        with c_m:
-            st.markdown("#### 📤 Step 1: Upload Master List")
-            m_file = st.file_uploader("Master Stock List (Required)", type=["xlsx", "csv"], key="inv_up")
+        st.markdown("#### 📤 Step 1: Upload Master List")
+        m_file = st.file_uploader("Master Stock List (Required)", type=["xlsx", "csv"], key="inv_up")
+    
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### 🏪 Step 2: Upload Outlet Stocks (Optional)")
+        loc_files = {}
         
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("#### 🏪 Step 2: Upload Outlet Stocks (Optional)")
-            loc_files = {}
-        
-            # Grid layout for outlets with explicit labels
-            lc = st.columns(len(locs))
-            for i, l in enumerate(locs):
-                with lc[i]:
-                    # Visual label for each outlet
-                    st.markdown(f"""
-                        <div style='background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px 8px 0 0; text-align: center; font-size: 0.85rem; font-weight: 600;'>
-                            {l}
-                        </div>
-                    """, unsafe_allow_html=True)
-                    u = st.file_uploader(f"Upload {l}", key=f"inv_l_{l}", label_visibility="collapsed")
-                    if u: loc_files[l] = u
+        # Grid layout for outlets with explicit labels
+        lc = st.columns(len(locs))
+        for i, l in enumerate(locs):
+            with lc[i]:
+                # Visual label for each outlet
+                st.markdown(f"""
+                    <div style='background: var(--primary); color: white; padding: 4px 10px; border-radius: 8px 8px 0 0; text-align: center; font-size: 0.85rem; font-weight: 600;'>
+                        {l}
+                    </div>
+                """, unsafe_allow_html=True)
+                u = st.file_uploader(f"Upload {l}", key=f"inv_l_{l}", label_visibility="collapsed")
+                if u: loc_files[l] = u
 
         if m_file and st.button("🚀 Analyze Distribution"):
             try:
@@ -241,8 +244,11 @@ with t_inv:
                 st.session_state.inv_active_l = locs
                 st.session_state.inv_t_col = t_col
                 save_state()
+                st.toast("✅ Distribution analyzed & saved!")
                 st.rerun()
-            except Exception as e: log_error(e, context="Inv Matrix")
+            except Exception as e: 
+                log_error(e, context="Inv Matrix")
+                st.toast("❌ Error rendering Matrix!")
 
         if st.session_state.get('inv_res_data') is not None:
             df = st.session_state.inv_res_data.copy()
@@ -289,7 +295,8 @@ with t_inv:
                 return styles
 
             st.markdown(f"#### Viewing {len(df)} Records")
-            st.dataframe(df.style.apply(style_matrix, axis=1), use_container_width=True)
+            with st.expander("👀 View Stock Matrix Detail", expanded=False):
+                st.dataframe(df.style.apply(style_matrix, axis=1), use_container_width=True)
         
             # --- EXCEL EXPORT ---
             buf_inv = io.BytesIO()
@@ -316,7 +323,7 @@ with t_inv:
                         ws.conditional_format(1, col_idx, len(export_df), col_idx, {'type': 'cell', 'criteria': 'equal to', 'value': 0, 'format': fmt_red})
                         ws.conditional_format(1, col_idx, len(export_df), col_idx, {'type': 'cell', 'criteria': 'greater than', 'value': 0, 'format': fmt_green})
 
-            st.download_button("📥 Download Distribution Report", buf_inv.getvalue(), "Stock_Distribution.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("📥 Download Distribution Report", buf_inv.getvalue(), "Stock_Distribution.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
 
 
 
@@ -438,12 +445,23 @@ with t_inv:
 # ---------------------------------------------------------
 with t_wp:
     st.markdown("### 💬 Verification Center")
+    
+    with st.expander("✏️ Customize Message Template"):
+        st.caption("Available variables: `{name}`, `{salutation}`, `{order_id}`")
+        custom_intro = st.text_area("Custom Header/Intro", value="", placeholder="*Order Verification From DEEN Commerce*\n\nAssalamu Alaikum, {salutation}!\n\nDear {name},\nPlease verify your order details:\n*Order ID:* {order_id}", height=150)
+        custom_footer = st.text_area("Custom Footer/Outro", value="", placeholder="Please confirm the order and address.\nIf any correction is needed, please let us know the possible adjustment.\n\n*Delivery fees apply for returns.*\n\nThank you for shopping with DEEN Commerce! https://deencommerce.com/", height=130)
+
     wp_f = st.file_uploader("📂 Verification List", key="wp_up_2")
     
     if wp_f:
         try:
             w_proc = WhatsAppOrderProcessor()
-            w_links = w_proc.create_whatsapp_links(w_proc.process_orders(pd.read_excel(wp_f) if wp_f.name.endswith('xlsx') else pd.read_csv(wp_f)))
+            processed_data = w_proc.process_orders(pd.read_excel(wp_f) if wp_f.name.endswith('xlsx') else pd.read_csv(wp_f))
+            w_links = w_proc.create_whatsapp_links(
+                processed_data,
+                custom_intro=custom_intro if custom_intro.strip() else None,
+                custom_footer=custom_footer if custom_footer.strip() else None
+            )
             
             c1, c2 = st.columns(2)
             with c1:
@@ -468,5 +486,20 @@ with t_logs:
         for l in reversed(logs):
             st.error(f"[{l['timestamp']}] {l['context']}: {l['error']}")
     else: st.success("No errors recorded.")
+
+# ---------------------------------------------------------
+# TAB 5: DEV LAB
+# ---------------------------------------------------------
+with t_dev_lab:
+    st.markdown("### 🧪 Experimental Developer Features")
+    st.info("These are mockup prototypes for Version 8.0.")
+    
+    dev_ai_tab, dev_wa_tab = st.tabs(["🤖 AI Data Chat", "📲 Whatsapp API Broadcast"])
+    
+    with dev_ai_tab:
+        render_ai_chat_tab()
+        
+    with dev_wa_tab:
+        render_whatsapp_api_tab()
 
 save_state()

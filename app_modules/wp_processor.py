@@ -189,7 +189,7 @@ class WhatsAppOrderProcessor:
 
         return grouped_df
 
-    def create_whatsapp_links(self, df: pd.DataFrame) -> pd.DataFrame:
+    def create_whatsapp_links(self, df: pd.DataFrame, custom_intro: str = None, custom_footer: str = None) -> pd.DataFrame:
         """Generate formatted WhatsApp messages and links."""
         df['whatsapp_link'] = None
         phone_col = self.config['phone_col']
@@ -208,20 +208,25 @@ class WhatsAppOrderProcessor:
                 row.get(self.config.get('city_col'), '')
             )
 
-            # Build Message
-            lines = [
-                f"*Order Verification From DEEN Commerce*",
-                "",
-                f"Assalamu Alaikum, {salutation}!",
-                "",
-                f"Dear {name},",
-                "",
-                "Please verify your order details:",
-                "",
-                f"*Order ID:* {row[self.config['order_id_col']]}",
-                "",
-                "*Your Order:*",
-            ]
+            # Build Message Intro
+            if custom_intro:
+                intro_text = custom_intro.replace("{name}", str(name)).replace("{salutation}", salutation).replace("{order_id}", str(row[self.config['order_id_col']]))
+                lines = intro_text.split("\n")
+                lines.extend(["", "*Your Order:*"])
+            else:
+                lines = [
+                    f"*Order Verification From DEEN Commerce*",
+                    "",
+                    f"Assalamu Alaikum, {salutation}!",
+                    "",
+                    f"Dear {name},",
+                    "",
+                    "Please verify your order details:",
+                    "",
+                    f"*Order ID:* {row[self.config['order_id_col']]}",
+                    "",
+                    "*Your Order:*",
+                ]
 
             # Products
             products = str(row[self.config['product_col']]).split('\n- ')
@@ -256,13 +261,19 @@ class WhatsAppOrderProcessor:
                 "*Shipping Address:*",
                 formatted_address,
                 "",
-                "Please confirm the order and address.",
-                "If any correction is needed, please let us know the possible adjustment.",
-                "",
-                "*Delivery fees apply for returns.*",
-                "",
-                "Thank you for shopping with DEEN Commerce! Grab our latest collection on: https://deencommerce.com/"
             ])
+            
+            if custom_footer:
+                lines.extend(custom_footer.split("\n"))
+            else:
+                lines.extend([
+                    "Please confirm the order and address.",
+                    "If any correction is needed, please let us know the possible adjustment.",
+                    "",
+                    "*Delivery fees apply for returns.*",
+                    "",
+                    "Thank you for shopping with DEEN Commerce! Grab our latest collection on: https://deencommerce.com/"
+                ])
 
             message = "\n".join(lines)
             encoded_message = urllib.parse.quote(message)
