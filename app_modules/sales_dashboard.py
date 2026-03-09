@@ -540,14 +540,14 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_pie.update_layout(
-                    margin=dict(l=100, r=100, t=30, b=80),
+                    margin=dict(l=80, r=160, t=40, b=40),
                     showlegend=True,
                     legend=dict(
-                        orientation="h",
+                        orientation="v",
                         yanchor="top",
-                        y=-0.1,
-                        xanchor="center",
-                        x=0.5,
+                        y=1,
+                        xanchor="left",
+                        x=1.05,
                         font=dict(size=11)
                     )
                 )
@@ -557,7 +557,7 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     textfont_size=11,
                     pull=0.01,
                 )
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
                 
             with v2:
                 fig_bar = px.bar(
@@ -574,7 +574,7 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     xaxis_title="",
                     yaxis_title="Quantity Sold",
                     showlegend=True,
-                legend=dict(
+                    legend=dict(
                         orientation="v",
                         yanchor="top",
                         y=1,
@@ -583,7 +583,7 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                         borderwidth=1,
                     ),
                 )
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_bar, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
 
     render_snapshot_button("snapshot-target-popup")
 
@@ -663,14 +663,14 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             fig_pie.update_layout(
-                margin=dict(l=100, r=100, t=30, b=80),
+                margin=dict(l=80, r=160, t=40, b=40),
                 showlegend=True,
                 legend=dict(
-                    orientation="h",
+                    orientation="v",
                     yanchor="top",
-                    y=-0.1,
-                    xanchor="center",
-                    x=0.5,
+                    y=1,
+                    xanchor="left",
+                    x=1.05,
                     font=dict(size=11)
                 )
             )
@@ -680,7 +680,7 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                 textfont_size=11,
                 pull=0.01,
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
             
         with v2:
             fig_bar = px.bar(
@@ -706,7 +706,7 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                     borderwidth=1,
                 ),
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
 
     render_snapshot_button("snapshot-target-main")
     st.divider()
@@ -728,7 +728,7 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
         xaxis_title="Revenue (TK)",
         legend_title="Category",
     )
-    st.plotly_chart(fig_top, use_container_width=True)
+    st.plotly_chart(fig_top, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
     
     st.subheader("Deep Dive Data")
 
