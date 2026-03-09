@@ -540,21 +540,14 @@ def _render_welcome_popup_content(summ, basket, last_updated="N/A", focus="all")
                     color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 fig_pie.update_layout(
-                    margin=dict(l=20, r=20, t=40, b=20),
+                    margin=dict(l=40, r=40, t=40, b=20),
                     uniformtext_minsize=10,
                     uniformtext_mode="hide",
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=-0.3,
-                        xanchor="center",
-                        x=0.5
-                    ),
+                    showlegend=False
                 )
                 fig_pie.update_traces(
-                    textposition="inside",
-                    textinfo="percent",
-                    insidetextorientation="radial",
+                    textposition="outside",
+                    textinfo="label+percent",
                     pull=0.01,
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
@@ -663,21 +656,14 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source_name, la
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             fig_pie.update_layout(
-                margin=dict(l=20, r=20, t=40, b=20),
+                margin=dict(l=40, r=40, t=40, b=20),
                 uniformtext_minsize=10,
                 uniformtext_mode="hide",
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.3,
-                    xanchor="center",
-                    x=0.5
-                ),
+                showlegend=False
             )
             fig_pie.update_traces(
-                textposition="inside",
-                textinfo="percent",
-                insidetextorientation="radial",
+                textposition="outside",
+                textinfo="label+percent",
                 pull=0.01,
             )
             st.plotly_chart(fig_pie, use_container_width=True)
