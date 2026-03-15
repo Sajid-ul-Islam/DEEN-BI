@@ -22,6 +22,7 @@ def get_category_from_name(name):
     if has_keyword('trouser', name_str): return 'Trousers'
     if has_keyword('twill', name_str) or has_keyword('chino', name_str): return 'Twill'
     if has_keyword('sweatshirt', name_str): return 'Sweatshirt'
+    if has_keyword('tank top', name_str): return 'TankTop'
     if has_keyword('gabardine', name_str) or has_keyword('pant', name_str): return 'Pants'
     
     # Accessories & Misc
