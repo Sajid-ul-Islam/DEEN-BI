@@ -1,37 +1,35 @@
-﻿# Automation Hub Pro v8.1
+# Automation Pivot 🚀
 
-Automation Hub Pro is a Streamlit workspace for order processing, inventory distribution, and WhatsApp verification.
+**Automation Pivot** is a high-performance Streamlit command center for unified e-commerce operations, unique customer growth tracking, and inventory distribution.
 
-## Main Navigation
+## 🚀 Key Features
 
-- Dashboard: live and manual sales dashboards
-- Orders: Pathao order processor and delivery text parser
-- Inventory: matrix analyzer, insights, and pick manifest
-- Messaging: WhatsApp verification link generation
-- More Tools: system logs and developer lab
+*   **📡 Live Stream Dashboard**: Real-time sales performance synchronized with GSheet masters.
+*   **👥 Customer Pulse**: Unique customer acquisition tracking, VIP loyalty leaderboards, and historical retention metrics back to 2022.
+*   **📂 Total Sales Report**: Dynamic filtering and multi-statement master synchronization with incremental loading.
+*   **🚛 Logistics HUB**: High-speed Pathao order processing and delivery text parsing.
+*   **🏠 Inventory Command**: Matrix analyzer for multi-location stock mapping and pick listings.
 
-## UX Improvements Included
+## 🎨 UI/UX Philosophy
 
-- Guided workflow steps for major modules
-- Upload -> validate -> preview -> export pattern
-- Shared action bar and reset confirmation controls
-- Unified labels and status messaging
-- Optional motion effects toggle
-- Sidebar sample template downloads
+*   **Midnight Command Center**: Glassmorphism aesthetic with neon-blue accents.
+*   **Executive Narrative**: Automated conversational storytelling for performance insights.
+*   **Adaptive Theme**: Full support for system Light/Dark mode switching.
+*   **Responsive Flow**: Guided upload -> validate -> analyze -> export workflows.
 
-## Run
+## 🛠️ Project Structure
+
+The codebase follows a strictly modular **`src/`** hierarchy for scalability:
+
+*   `src/core/`: Foundation logic (paths, sync, state management).
+*   `src/modules/`: High-level domain features (sales, inventory, logistics).
+*   `src/engine/`: Data processing and calculation logic.
+*   `src/ui/`: Components, styling, and navigation config.
+*   `src/utils/`: Shared generic utilities (data, I/O).
+
+## ⚡ Run Locally
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
-
-## Project Structure
-
-- `app.py`: application shell and navigation
-- `app_modules/ui_config.py`: UI constants and labels
-- `app_modules/ui_components.py`: reusable UI components
-- `app_modules/pathao_tab.py`: Pathao workflow
-- `app_modules/distribution_tab.py`: inventory workflow
-- `app_modules/wp_tab.py`: WhatsApp workflow
-- `app_modules/fuzzy_parser_tab.py`: text parser workflow

@@ -5,6 +5,8 @@ plotly
 openpyxl
 xlsxwriter
 pillow
+beautifulsoup4
+
 # Fuzzy Matching
 rapidfuzz
 
