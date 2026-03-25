@@ -10,23 +10,40 @@ from src.ui.config import APP_TITLE, APP_VERSION
 
 
 def inject_base_styles():
+    theme = st.session_state.get("app_theme", "Dark Mode")
+    if theme == "Dark Mode":
+        root_vars = """
+        --glass-bg: rgba(15, 23, 42, 0.75);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --accent-glow: rgba(59, 130, 246, 0.5);
+        --neon-blue: #3b82f6;
+        --text-primary: #f8fafc;
+        --text-secondary: #94a3b8;
+        --bg-grad: radial-gradient(circle at top right, #1e293b, #0f172a);
+        """
+    else:
+        root_vars = """
+        --glass-bg: rgba(255, 255, 255, 0.85);
+        --glass-border: rgba(0, 0, 0, 0.08);
+        --accent-glow: rgba(30, 64, 175, 0.2);
+        --neon-blue: #1d4ed8;
+        --text-primary: #1e293b;
+        --text-secondary: #475569;
+        --bg-grad: radial-gradient(circle at top right, #f1f5f9, #e2e8f0);
+        """
+
     styles = """
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
     :root {
-        --glass-bg: rgba(15, 23, 42, 0.7);
-        --glass-border: rgba(255, 255, 255, 0.08);
-        --accent-glow: rgba(59, 130, 246, 0.5);
-        --neon-blue: #3b82f6;
+        __ROOT_VARS__
         --neon-green: #10b981;
-        --text-primary: #f8fafc;
-        --text-secondary: #94a3b8;
     }
 
     .stApp {
-        background: radial-gradient(circle at top right, #1e293b, #0f172a);
-        color: var(--text-primary);
-        font-family: 'Outfit', sans-serif;
+        background: var(--bg-grad) !important;
+        color: var(--text-primary) !important;
+        font-family: 'Outfit', sans-serif !important;
     }
 
     /* GLASS CARD EFFECT */
@@ -220,7 +237,7 @@ def inject_base_styles():
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-</style>"""
+</style>""".replace("__ROOT_VARS__", root_vars)
     st.markdown(styles, unsafe_allow_html=True)
 
 

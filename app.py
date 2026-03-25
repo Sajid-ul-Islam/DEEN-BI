@@ -46,6 +46,15 @@ def run_app():
 
     with st.sidebar:
         st.markdown("### 🎛️ SYSTEM COCKPIT")
+        
+        # Theme Control
+        theme_choice = st.radio(
+            "Visual Protocol",
+            ["Dark Mode", "Light Mode"],
+            key="app_theme",
+            horizontal=True
+        )
+
         st.session_state.show_animation = st.toggle(
             "Motion Effects",
             value=st.session_state.get("show_animation", False),
