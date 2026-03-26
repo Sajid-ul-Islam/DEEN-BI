@@ -23,13 +23,13 @@ def inject_base_styles():
         """
     else:
         root_vars = """
-        --glass-bg: rgba(255, 255, 255, 0.85);
-        --glass-border: rgba(0, 0, 0, 0.08);
-        --accent-glow: rgba(30, 64, 175, 0.2);
+        --glass-bg: rgba(255, 255, 255, 0.9);
+        --glass-border: rgba(0, 0, 0, 0.12);
+        --accent-glow: rgba(30, 64, 175, 0.15);
         --neon-blue: #1d4ed8;
-        --text-primary: #1e293b;
-        --text-secondary: #475569;
-        --bg-grad: radial-gradient(circle at top right, #f1f5f9, #e2e8f0);
+        --text-primary: #0f172a;
+        --text-secondary: #4b5563;
+        --bg-grad: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
         """
 
     styles = """

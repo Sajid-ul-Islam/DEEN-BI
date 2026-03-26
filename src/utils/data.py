@@ -7,6 +7,7 @@ def find_columns(df):
     """Detects primary columns using exact and then partial matching with expanded aliases."""
     mapping = {
         'name': ['item name', 'product name', 'product', 'item', 'title', 'description', 'name', 'internal_name'],
+        'customer_name': ['customer name', 'billing name', 'full name', 'client name', 'customer', 'recipient'],
         'cost': ['item cost', 'price', 'unit price', 'cost', 'rate', 'mrp', 'selling price', 'total', 'internal_cost', 'line_total'],
         'qty': ['quantity', 'qty', 'units', 'sold', 'count', 'total quantity', 'internal_qty'],
         'date': ['date', 'order date', 'month', 'time', 'created at', 'date_created', 'date_paid'],

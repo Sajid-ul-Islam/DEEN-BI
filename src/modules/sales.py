@@ -56,34 +56,46 @@ def get_custom_report_tab_label():
 def process_data(df, selected_cols):
     try:
         df = df.copy()
-        df['Internal_Name'] = df[selected_cols['name']].fillna('Unknown Product').astype(str)
-        df['Internal_Cost'] = pd.to_numeric(df[selected_cols['cost']], errors='coerce').fillna(0)
-        df['Internal_Qty'] = pd.to_numeric(df[selected_cols['qty']], errors='coerce').fillna(0)
+        df["Internal_Name"] = df[selected_cols["name"]].fillna("Unknown Product").astype(str)
+        df["Internal_Cost"] = pd.to_numeric(df[selected_cols["cost"]], errors="coerce").fillna(0)
+        df["Internal_Qty"] = pd.to_numeric(df[selected_cols["qty"]], errors='coerce').fillna(0)
         
-        tf = ""
-        if 'date' in selected_cols:
-            ds = pd.to_datetime(df[selected_cols['date']], errors='coerce').dropna()
-            if not ds.empty: tf = f"{ds.min().strftime('%d%b')}_to_{ds.max().strftime('%d%b_%y')}"
+        # New: Customer Name support
+        c_col = selected_cols.get("customer_name")
+        df["Internal_Customer"] = df[c_col].fillna("Unknown Customer").astype(str) if c_col and c_col in df.columns else "N/A"
 
-        df['Category'] = df['Internal_Name'].apply(get_category_for_sales)
-        df['Total Amount'] = df['Internal_Cost'] * df['Internal_Qty']
-        
-        summ = df.groupby('Category').agg({'Internal_Qty': 'sum', 'Total Amount': 'sum'}).reset_index()
-        summ.columns = ['Category', 'Total Qty', 'Total Amount']
-        
-        drill = df.groupby(['Category', 'Internal_Cost']).agg({'Internal_Qty': 'sum', 'Total Amount': 'sum'}).reset_index()
-        drill.columns = ['Category', 'Price (TK)', 'Total Qty', 'Total Amount']
-        
-        top = df.groupby('Internal_Name').agg({'Internal_Qty': 'sum', 'Total Amount': 'sum', 'Category': 'first'}).reset_index()
-        top.columns = ['Product Name', 'Total Qty', 'Total Amount', 'Category']
-        top = top.sort_values('Total Amount', ascending=False)
-        
-        bk = {"avg_basket_qty": 0, "avg_basket_value": 0, "total_orders": 0}
-        gc = [selected_cols[k] for k in ('order_id', 'phone', 'email') if k in selected_cols and selected_cols[k] in df.columns]
-        if gc:
-            og = df.groupby(gc).agg({'Internal_Qty': 'sum', 'Total Amount': 'sum'})
-            bk = {"avg_basket_qty": og['Internal_Qty'].mean(), "avg_basket_value": og['Total Amount'].mean(), "total_orders": len(og)}
+        tf = ""
+        if "date" in selected_cols:
+            ds = pd.to_datetime(df[selected_cols["date"]], errors="coerce").dropna()
+            if not ds.empty:
+                tf = f"{ds.min().strftime('%d%b')}_to_{ds.max().strftime('%d%b_%y')}"
+
+        df["Category"] = df["Internal_Name"].apply(get_category_for_sales)
+        df["Total Amount"] = df["Internal_Cost"] * df["Internal_Qty"]
+
+        summ = df.groupby("Category").agg({"Internal_Qty": "sum", "Total Amount": "sum"}).reset_index()
+        summ.columns = ["Category", "Total Qty", "Total Amount"]
+
+        drill = df.groupby(["Category", "Internal_Cost"]).agg({"Internal_Qty": "sum", "Total Amount": "sum"}).reset_index()
+        drill.columns = ["Category", "Price (TK)", "Total Qty", "Total Amount"]
+
+        # 👑 Top Spenders (Customers)
+        if "Internal_Customer" in df.columns and (df["Internal_Customer"] != "N/A").any():
+            top = df.groupby("Internal_Customer").agg({"Total Amount": "sum", "Internal_Qty": "sum"}).reset_index()
+            top.columns = ["Customer Name", "Total Spent", "Items Purchased"]
+        else:
+            # Fallback to Top Products if customer names aren't detectable
+            top = df.groupby("Internal_Name").agg({"Internal_Qty": "sum", "Total Amount": "sum", "Category": "first"}).reset_index()
+            top.columns = ["Product Name", "Total Qty", "Total Amount", "Category"]
             
+        top = top.sort_values(top.columns[1], ascending=False)
+
+        bk = {"avg_basket_qty": 0, "avg_basket_value": 0, "total_orders": 0}
+        gc = [selected_cols[k] for k in ("order_id", "phone", "email") if k in selected_cols and selected_cols[k] in df.columns]
+        if gc:
+            og = df.groupby(gc).agg({"Internal_Qty": "sum", "Total Amount": "sum"})
+            bk = {"avg_basket_qty": og["Internal_Qty"].mean(), "avg_basket_value": og["Total Amount"].mean(), "total_orders": len(og)}
+
         return drill, summ, top, tf, bk
     except Exception as e:
         log_system_event("CALC_ERROR", str(e))
@@ -91,19 +103,25 @@ def process_data(df, selected_cols):
 
 def render_story_summary(summ, tp, timeframe, bk):
     """Conversational data storytelling component."""
-    if summ is None or summ.empty: return
+    if summ is None or summ.empty:
+        return
+
+    total_rev = summ["Total Amount"].sum()
+    top_cat = summ.sort_values("Total Amount", ascending=False).iloc[0]["Category"]
     
-    total_rev = summ['Total Amount'].sum()
-    top_cat = summ.sort_values('Total Amount', ascending=False).iloc[0]['Category']
-    top_prod = tp.iloc[0]['Product Name']
-    orders = bk.get('total_orders', 0)
+    # Adaptive Focus
+    is_cust = "Customer Name" in tp.columns
+    top_entity = tp.iloc[0][tp.columns[0]]
+    entity_label = "top shopper" if is_cust else "high-velocity item"
     
+    orders = bk.get("total_orders", 0)
+
     story = f"""
     <div style="background: rgba(59, 130, 246, 0.05); border-left: 4px solid var(--neon-blue); padding: 1.5rem; border-radius: 0 16px 16px 0; margin-bottom: 2rem; font-family: 'Outfit';">
         <div style="color: var(--neon-blue); font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.1em; margin-bottom: 0.5rem;">📊 EXECUTIVE NARRATIVE</div>
         <div style="font-size: 1.1rem; color: var(--text-primary); line-height: 1.5;">
             In the period <b>{timeframe or 'Overview'}</b>, the operations processed <b>{orders:,} orders</b> driving a total revenue of <b>TK {total_rev:,.0f}</b>. 
-            The performance was primarily led by the <b>{top_cat}</b> category, with <b>{top_prod}</b> emerging as the high-velocity item. 
+            The performance was primarily led by the <b>{top_cat}</b> category, with <b>{top_entity}</b> emerging as the {entity_label}. 
             Customer engagement shows an average basket value of <b>TK {bk.get('avg_basket_value', 0):,.0f}</b> per transaction.
         </div>
     </div>
@@ -121,36 +139,45 @@ def render_dashboard_output(drill, summ, top, timeframe, basket, source, updated
     c3.metric("Revenue", f"TK {summ['Total Amount'].sum():,.0f}")
     c4.metric("Avg Basket", f"TK {basket['avg_basket_value']:,.0f}")
     
+    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
+    color_scale = "Blues_r" if is_dark else "Plasma"
+    chart_font_color = "#f8fafc" if is_dark else "#0f172a"
+
     col1, col2 = st.columns(2)
     with col1:
         # Sort for color consistency
-        sorted_summ = summ.sort_values('Total Amount', ascending=False)
-        st.plotly_chart(
-            px.pie(
-                sorted_summ, 
-                values='Total Amount', 
-                names='Category', 
-                hole=0.5, 
-                title="Revenue Share",
-                color_discrete_sequence=px.colors.sequential.Blues_r
-            ), 
-            use_container_width=True,
-            key=f"sales_pie_{source or 'default'}"
+        sorted_summ = summ.sort_values("Total Amount", ascending=False)
+        fig_pie = px.pie(
+            sorted_summ,
+            values="Total Amount",
+            names="Category",
+            hole=0.5,
+            title="Revenue Share",
+            color_discrete_sequence=getattr(px.colors.sequential, color_scale),
         )
+        fig_pie.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color=chart_font_color
+        )
+        st.plotly_chart(fig_pie, use_container_width=True, key=f"sales_pie_{source or 'default'}")
+
     with col2:
-        st.plotly_chart(
-            px.bar(
-                sorted_summ, 
-                x='Total Amount', 
-                y='Category', 
-                orientation='h', 
-                title="Category Performance",
-                color='Total Amount',
-                color_continuous_scale='Blues'
-            ), 
-            use_container_width=True,
-            key=f"sales_bar_{source or 'default'}"
+        fig_bar = px.bar(
+            sorted_summ,
+            x="Total Amount",
+            y="Category",
+            orientation="h",
+            title="Category Performance",
+            color="Total Amount",
+            color_continuous_scale="Blues" if is_dark else "Viridis",
         )
+        fig_bar.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color=chart_font_color
+        )
+        st.plotly_chart(fig_bar, use_container_width=True, key=f"sales_bar_{source or 'default'}")
 
     with st.expander("Detailed Product Breakdown"):
         st.dataframe(top, use_container_width=True, hide_index=True)
@@ -201,13 +228,25 @@ def get_all_statements_master(full_history: bool = False):
                 m = find_columns(df)
                 df = df.copy()
                 df['_src_tab'] = tab["name"]
-                if 'name' in m: df['_p_name'] = df[m['name']].astype(str)
-                if 'cost' in m: df['_p_cost'] = pd.to_numeric(df[m['cost']], errors='coerce').fillna(0)
-                if 'qty' in m: df['_p_qty'] = pd.to_numeric(df[m['qty']], errors='coerce').fillna(0)
-                if 'date' in m: df['_p_date'] = parse_dates(df[m['date']])
-                if 'order_id' in m: df['_p_order'] = df[m['order_id']].astype(str)
-                if 'phone' in m: df['_p_phone'] = df[m['phone']].astype(str)
-                if 'email' in m: df['_p_email'] = df[m['email']].astype(str)
+                if "name" in m:
+                    df["_p_name"] = df[m["name"]].astype(str)
+                if "customer_name" in m:
+                    df["_p_cust_name"] = df[m["customer_name"]].astype(str)
+                else:
+                    df["_p_cust_name"] = "N/A"
+
+                if "cost" in m:
+                    df["_p_cost"] = pd.to_numeric(df[m["cost"]], errors="coerce").fillna(0)
+                if "qty" in m:
+                    df["_p_qty"] = pd.to_numeric(df[m["qty"]], errors="coerce").fillna(0)
+                if "date" in m:
+                    df["_p_date"] = parse_dates(df[m["date"]])
+                if "order_id" in m:
+                    df["_p_order"] = df[m["order_id"]].astype(str)
+                if "phone" in m:
+                    df["_p_phone"] = df[m["phone"]].astype(str)
+                if "email" in m:
+                    df["_p_email"] = df[m["email"]].astype(str)
                 all_dfs.append(df)
         except Exception:
             pass
@@ -236,7 +275,7 @@ def render_custom_period_tab():
         # ALLOW SELECTION FROM 2022
         abs_min = date(2022, 1, 1)
         f1, f2 = st.columns(2)
-        default_start = max(min_d, date.today() - timedelta(days=30))
+        default_start = max(min_d, date.today() - timedelta(days=90))
         start = f1.date_input("Filter From", default_start, min_value=abs_min, max_value=date.today(), key="cust_start")
         end = f2.date_input("Filter To", date.today(), min_value=abs_min, max_value=date.today(), key="cust_end")
         
@@ -258,99 +297,142 @@ def render_custom_period_tab():
 
 def render_customer_pulse_tab():
     section_card("👥 Customer Pulse", "Cross-statement unique customer insights and loyalty metrics.")
-    if st.button("🔄 Refresh Pulse Data", use_container_width=True, key="refresh_pulse_btn"): get_all_statements_master.clear(); st.rerun()
-    
+    if st.button("🔄 Refresh Pulse Data", use_container_width=True, key="refresh_pulse_btn"):
+        get_all_statements_master.clear()
+        st.rerun()
+
     # Check if we need full history for Pulse too
-    full_hist = st.toggle("Enable Full History Analytics", value=False, key="pulse_hist_toggle")
-    
+    full_hist = st.toggle("Enable Full Deep-History Analytics", value=False, key="pulse_hist_toggle")
+
     master, msg = get_all_statements_master(full_history=full_hist)
-    if master is None: st.info("Pulse data not yet ready."); return
-    
-    # Default to last 30 days for Pulse overview
-    if '_p_date' in master.columns:
-        valid_dates = master[master['_p_date'].notna()]
+    if master is None:
+        st.info("Pulse data not yet ready.")
+        return
+
+    # Process UIDs across the entire master
+    master["UID"] = master.get("_p_phone", pd.Series(dtype=str)).fillna(master.get("_p_email", pd.Series(dtype=str))).astype(str).str.strip().str.lower()
+    master = master[(master["UID"] != "") & (master["UID"] != "nan") & (master["UID"].notna())]
+
+    if "_p_date" in master.columns:
+        valid_dates = master[master["_p_date"].notna()]
         if not valid_dates.empty:
-            min_d = valid_dates['_p_date'].min().date()
+            min_d = valid_dates["_p_date"].min().date()
             abs_min = date(2022, 1, 1)
             f1, f2 = st.columns(2)
-            default_pulse_start = max(min_d, date.today() - timedelta(days=180))
+            default_pulse_start = max(min_d, date.today() - timedelta(days=90))
             p_start = f1.date_input("Pulse From", default_pulse_start, min_value=abs_min, max_value=date.today(), key="pulse_start")
             p_end = f2.date_input("Pulse To", date.today(), min_value=abs_min, max_value=date.today(), key="pulse_end")
-            db = master[(master['_p_date'].dt.date >= p_start) & (master['_p_date'].dt.date <= p_end)].copy()
+            db = master[(master["_p_date"].dt.date >= p_start) & (master["_p_date"].dt.date <= p_end)].copy()
         else:
             db = master.copy()
     else:
         db = master.copy()
 
-    if db.empty: st.warning("No data found for selected pulse range."); return
+    if db.empty:
+        st.warning("No data found for selected pulse range.")
+        return
+
+    # Advanced Metrics
+    db["Total_Amount"] = db["_p_cost"] * db["_p_qty"]
+    total_revenue = db["Total_Amount"].sum()
     
-    # Identify unique customers across the ENTIRE current master (Global View)
-    master['UID'] = master.get('_p_phone', pd.Series(dtype=str)).fillna(master.get('_p_email', pd.Series(dtype=str))).astype(str).str.strip().str.lower()
-    global_unique = master[(master['UID'] != "") & (master['UID'] != "nan") & (master['UID'].notna())]['UID'].nunique()
+    unique_customers = db["UID"].nunique()
+    # Group by UID and take the last name seen as the most accurate
+    freq = db.groupby("UID").agg({
+        "_p_cust_name": "last",
+        "_p_order": "nunique", 
+        "Total_Amount": "sum", 
+        "_p_date": "max"
+    }).reset_index()
+    freq.columns = ["UID", "Name", "Orders", "LifetimeValue", "LastActive"]
+    # Fallback for display
+    freq["Name"] = freq.apply(lambda x: x["UID"] if x["Name"] == "N/A" else x["Name"], axis=1)
+
+    returning_count = len(freq[freq["Orders"] > 1])
+    retention_rate = (returning_count / unique_customers * 100) if unique_customers > 0 else 0
+    avg_clv = total_revenue / unique_customers if unique_customers > 0 else 0
+
+    # STORYTELLING NARRATIVE
+    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
+    accent_color = "#3b82f6" if is_dark else "#1d4ed8"
+    text_color = "#f8fafc" if is_dark else "#0f172a"
     
-    # Process Filtered View for New/Growth analysis
-    db['UID'] = db.get('_p_phone', pd.Series(dtype=str)).fillna(db.get('_p_email', pd.Series(dtype=str))).astype(str).str.strip().str.lower()
-    db = db[(db['UID'] != "") & (db['UID'] != "nan") & (db['UID'].notna())]
-    
-    cust = db.sort_values('_p_date').groupby('UID')['_p_date'].min().reset_index()
-    cust.columns = ['UID', 'AcqDate']
-    
-    # Calculate Acquisition Metrics
-    today = date.today()
-    this_m = date(today.year, today.month, 1)
-    last_m_end = this_m - timedelta(days=1)
-    last_m_start = date(last_m_end.year, last_m_end.month, 1)
-    
-    new_lm = len(cust[(cust['AcqDate'].dt.date >= last_m_start) & (cust['AcqDate'].dt.date <= last_m_end)])
-    new_tm = len(cust[cust['AcqDate'].dt.date >= this_m])
-    
-    m0, m1, m2, m3 = st.columns(4)
-    m0.metric("Total Customers (Current Data)", f"{global_unique:,}")
-    m1.metric("Range Unique Customers", f"{len(cust):,}")
-    m2.metric("New (Last Month)", f"{new_lm:,}")
-    m3.metric("New (This Month)", f"{new_tm:,}")
-    
-    # Visuals
-    trend = cust.dropna(subset=['AcqDate']).copy()
-    trend['Month'] = trend['AcqDate'].dt.strftime('%Y-%m')
-    trend_grp = trend.groupby('Month').size().reset_index(name='New')
-    trend_grp['Total (Cumulative)'] = trend_grp['New'].cumsum()
+    story = f"""
+    <div style="background: rgba(59, 130, 246, 0.08); border-left: 5px solid {accent_color}; padding: 1.5rem; border-radius: 4px 20px 20px 4px; margin-bottom: 2.5rem; font-family: 'Outfit';">
+        <div style="color: {accent_color}; font-weight: 800; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.15em; margin-bottom: 0.75rem;">🛰️ CUSTOMER BASE INTELLIGENCE</div>
+        <div style="font-size: 1.15rem; color: {text_color}; line-height: 1.6; font-weight: 400;">
+            Currently tracking <b>{unique_customers:,} unique customers</b> within the selected window. 
+            The ecosystem demonstrates a <b>{retention_rate:.1f}% retention rate</b>, with returning loyals driving sustainable growth. 
+            On average, each customer represents a lifetime value (CLV) of <b>TK {avg_clv:,.0f}</b>. 
+            The high retention suggests a strong product-market fit, while the acquisition trend indicates active scalability.
+        </div>
+    </div>
+    """
+    st.markdown(story, unsafe_allow_html=True)
+
+    # Metrics HUD
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Unique Pulse", f"{unique_customers:,}")
+    m2.metric("Retention Rate", f"{retention_rate:.1f}%")
+    m3.metric("Avg CLV", f"TK {avg_clv:,.0f}")
+    m4.metric("Loyalists", f"{returning_count:,}")
+
+    # Visual Insights
+    theme_template = "plotly_dark" if is_dark else "plotly_white"
+    chart_font_color = "#f8fafc" if is_dark else "#0f172a"
     
     col1, col2 = st.columns(2)
     with col1:
-        # Dual-series graph: Line for monthly new and total growth
-        fig_trend = px.line(
-            trend_grp, 
-            x='Month', 
-            y=['Total (Cumulative)', 'New'], 
-            title="Customer Growth & Acquisition", 
-            template="plotly_dark", 
-            color_discrete_sequence=['#3b82f6', '#10b981']
-        ).update_layout(hovermode="x unified")
-        # Add markers for better clarity on data points
-        fig_trend.update_traces(mode='lines+markers')
-        st.plotly_chart(fig_trend, use_container_width=True)
-    
-    with col2:
-        freq = db.groupby('UID').agg({'_p_order': 'nunique', '_p_cost': 'sum'}).reset_index()
-        freq.columns = ['UID', 'Orders', 'Revenue']
-        returning = len(freq[freq['Orders'] > 1])
-        one_time = len(freq[freq['Orders'] == 1])
-        retention_df = pd.DataFrame({'Type': ['Returning', 'One-time'], 'Count': [returning, one_time]})
-        st.plotly_chart(px.pie(retention_df, values='Count', names='Type', title="Retention Snapshot", hole=0.5, color_discrete_sequence=['#10b981', '#334155']), use_container_width=True)
-
-    # NEW FEATURES: VIP Leaderboard
-    st.markdown("### 🏆 VIP Leaderboard (Top Spenders)")
-    vip = freq.sort_values('Revenue', ascending=False).head(10).copy()
-    # Mask UID for privacy if needed, but here we show it for internal use
-    st.table(vip.style.format({'Revenue': 'TK {:,.0f}'}))
-    
-    with st.expander("🔍 Customer Geography & Channel Hint"):
-        if '_p_phone' in db.columns:
-            total_with_phone = len(db[db['_p_phone'].str.startswith('01', na=False)])
-            st.info(f"Verified mobile contacts in database: {total_with_phone:,}")
+        cust_acq = db.sort_values("_p_date").groupby("UID")["_p_date"].min().reset_index()
+        cust_acq.columns = ["UID", "AcqDate"]
+        cust_acq["Month"] = cust_acq["AcqDate"].dt.strftime("%Y-%m")
+        trend_grp = cust_acq.groupby("Month").size().reset_index(name="New")
+        trend_grp["Cumulative"] = trend_grp["New"].cumsum()
         
-        # Acquisition source if multiple tabs
-        if '_src_tab' in db.columns:
-            source_grp = db.groupby('_src_tab').size().reset_index(name='Records')
-            st.plotly_chart(px.bar(source_grp, x='Records', y='_src_tab', orientation='h', title="Records by Statement Source"), use_container_width=True)
+        fig_growth = px.line(
+            trend_grp, x="Month", y=["Cumulative", "New"], 
+            title="Customer Scaling Factor",
+            template=theme_template,
+            color_discrete_sequence=["#3b82f6", "#10b981"] if is_dark else ["#1d4ed8", "#059669"]
+        ).update_layout(
+            hovermode="x unified", 
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color=chart_font_color
+        )
+        fig_growth.update_traces(mode="lines+markers")
+        st.plotly_chart(fig_growth, use_container_width=True, key="pulse_scaling_line")
+
+    with col2:
+        retention_df = pd.DataFrame({
+            "Segment": ["Returning Loyals", "One-Time Shoppers"],
+            "Count": [returning_count, unique_customers - returning_count]
+        })
+        fig_ret = px.pie(
+            retention_df, values="Count", names="Segment", 
+            title="Retention Dynamics", 
+            hole=0.6,
+            template=theme_template,
+            color_discrete_sequence=["#10b981", "#334155"] if is_dark else ["#059669", "#cbd5e1"]
+        ).update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)",
+            font_color=chart_font_color
+        )
+        st.plotly_chart(fig_ret, use_container_width=True, key="pulse_ret_pie")
+
+    # VIP LEADERBOARD
+    st.markdown("### 🏆 Platinum Tier: Top 10 Spenders")
+    vip = freq.sort_values("LifetimeValue", ascending=False).head(10).copy()
+    vip["Engagement Index"] = vip["Orders"].apply(lambda x: "🔥 High" if x > 3 else "⚡ Mid")
+    st.table(vip[["Name", "UID", "Orders", "LifetimeValue", "Engagement Index"]].style.format({"LifetimeValue": "TK {:,.0f}"}))
+
+    with st.expander("🔍 Deep Dive: Demographic & Risk Analysis"):
+        st.caption("Risk Analysis: Customers not active in 90+ days")
+        three_months_ago = datetime.now() - timedelta(days=90)
+        risk_count = len(freq[freq["LastActive"] < three_months_ago])
+        st.warning(f"⚠️ At-Risk Customers (Inactive > 90 days): **{risk_count:,}** ({risk_count/unique_customers*100:.1f}%)")
+        
+        if "_src_tab" in db.columns:
+            source_grp = db.groupby("_src_tab").size().reset_index(name="Volume")
+            st.plotly_chart(px.bar(source_grp, x="Volume", y="_src_tab", orientation="h", title="Loyalty by Source Channel"), use_container_width=True)

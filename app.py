@@ -36,7 +36,6 @@ def run_app():
         sample_file_download,
         section_card,
     )
-    from src.ui.config import PRIMARY_NAV
     from src.modules.whatsapp import render_whatsapp_api_tab
     from src.modules.ecommerce import render_wp_tab
 
@@ -46,13 +45,13 @@ def run_app():
 
     with st.sidebar:
         st.markdown("### 🎛️ SYSTEM COCKPIT")
-        
+
         # Theme Control
-        theme_choice = st.radio(
+        st.radio(
             "Visual Protocol",
             ["Dark Mode", "Light Mode"],
             key="app_theme",
-            horizontal=True
+            horizontal=True,
         )
 
         st.session_state.show_animation = st.toggle(
@@ -69,78 +68,109 @@ def run_app():
 
     render_header()
 
-    # Optimized Command Center Navigation
+    # Consolidated Command Center Navigation
     primary_nav = [
-        "📡 Live Stream",
+        "📡 Live",
         get_custom_report_tab_label(),
-        "👥 Customer Pulse",
-        "🚛 Orders & Logistics",
-        "🏠 InventoryHub",
-        "💬 WhatsApp",
-        get_wp_api_orders_tab_label()
+        "👥 Pulse",
+        "🚛 Operations Hub",
+        "🛠️ System Tools",
     ]
     tabs = st.tabs(primary_nav)
 
-    # 0. 📡 LIVE STREAM DASHBOARD
+    # 1. 📡 LIVE STREAM
     with tabs[0]:
         render_live_tab()
 
-    # 1. 📂 TOTAL SALES (HISTORICAL)
+    # 2. 📂 HISTORICAL SALES
     with tabs[1]:
         render_custom_period_tab()
 
-    # 2. 👥 CUSTOMER PULSE
+    # 3. 👥 CUSTOMER PULSE
     with tabs[2]:
         from src.modules.sales import render_customer_pulse_tab
+
         render_customer_pulse_tab()
 
-    # 3. 🚛 LOGISTICS & ORDERS
+    # 4. 🚛 OPERATIONS HUB (NESTED)
     with tabs[3]:
-        o_p, o_f = st.tabs(["🚚 Pathao Processor", "🔍 Delivery Text Parser"])
-        with o_p:
+        sub_nav = [
+            "🚚 Pathao",
+            "🔍 Text Parser",
+            "🏠 Inventory",
+            "💬 WhatsApp Links",
+            get_wp_api_orders_tab_label(),
+        ]
+        sub_tabs = st.tabs(sub_nav)
+
+        with sub_tabs[0]:
             render_pathao_tab(guided=False)
-        with o_f:
+
+        with sub_tabs[1]:
             render_fuzzy_parser_tab(guided=False)
 
-    # 4. 📦 INVENTORY HUB
+        with sub_tabs[2]:
+            render_distribution_tab(
+                search_q=st.session_state.get("inv_matrix_search", ""),
+                guided=False,
+            )
+
+        with sub_tabs[3]:
+            render_wp_tab(guided=False)
+
+        with sub_tabs[4]:
+            render_wp_api_orders_tab()
+
+    # 5. 🛠️ SYSTEM TOOLS (MOVED TO MAIN TABS)
     with tabs[4]:
-        render_distribution_tab(
-            search_q=st.session_state.get("inv_matrix_search", ""),
-            guided=False,
-        )
+        utils_nav = ["📜 Logs", "🧪 Health", "📅 Exports", "🚀 Experiments"]
+        utils_tabs = st.tabs(utils_nav)
 
-    # 5. ☎️ WHATSAPP CHANNEL
-    with tabs[5]:
-        render_wp_tab(guided=False)
-
-    # 6. 🌐 WOOCOMMERCE SYNC
-    with tabs[6]:
-        render_wp_api_orders_tab()
-
-    # ➕ UTILITY DRAWER
-    with st.expander("🛠️ ADVANCED UTILITIES", expanded=False):
-        u1, u2, u3, u4 = st.tabs(["📜 Logs", "🧪 Data Health", "📅 Daily Summary", "🚀 Experimental"])
-        with u1:
+        with utils_tabs[0]:
             logs = get_logs()
             if logs:
                 for entry in reversed(logs):
                     st.error(f"[{entry['timestamp']}] {entry['context']}: {entry['error']}")
             else:
-                st.success("System clear. No anomalies detected.")
-        with u2: render_data_quality_monitor_tab()
-        with u3: render_daily_summary_export_tab()
-        with u4:
-            x1, x2 = st.tabs(["🧠 AI Analyst", "📲 WhatsApp Broadcast"])
-            with x1: render_ai_chat_tab()
-            with x2: render_whatsapp_api_tab()
+                st.success("System core stable. 0 anomalies detected.")
+
+        with utils_tabs[1]:
+            render_data_quality_monitor_tab()
+
+        with utils_tabs[2]:
+            render_daily_summary_export_tab()
+
+        with utils_tabs[3]:
+            exp_tabs = st.tabs(["🧠 AI Analyst", "📲 Broadcast"])
+            with exp_tabs[0]:
+                render_ai_chat_tab()
+            with exp_tabs[1]:
+                render_whatsapp_api_tab()
+
+    # Sidebar Recovery
+    with st.sidebar:
+        st.divider()
+        st.markdown("### 🔄 Global Recovery")
+        if st.button("Clear Cache & Rerun", use_container_width=True):
+            st.cache_data.clear()
+            st.session_state.clear()
+            st.rerun()
+
+    # Footer
+    st.markdown("---")
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.caption("© 2026 DEEN COMMERCE • Automation Pivot")
+    with c2:
+        st.caption("Powered by Antigravity AI Engine")
 
 
-try:
-    run_app()
-except Exception as exc:
-    # Failsafe to prevent full redacted crash pages on Streamlit Cloud.
-    from src.core.errors import log_error
+if __name__ == "__main__":
+    try:
+        run_app()
+    except Exception as exc:
+        from src.core.errors import log_error
 
-    log_error(exc, context="App Bootstrap")
-    st.error("Application failed to render. Check 'More Tools -> System Logs' for details.")
-    st.code(str(exc))
+        log_error(exc, context="Main App Bootstrap")
+        st.error("Critical: Application failed to render.")
+        st.code(str(exc))
