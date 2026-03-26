@@ -229,15 +229,15 @@ def get_all_statements_master(full_history: bool = False):
                 df = df.copy()
                 df["_src_tab"] = tab["name"]
 
-                # 🛡️ Initialize full internal schema to avoid KeyError downstream
-                df["_p_name"] = df.get("_p_name", "Unknown Product")
-                df["_p_cust_name"] = df.get("_p_cust_name", "N/A")
-                df["_p_cost"] = df.get("_p_cost", 0)
-                df["_p_qty"] = df.get("_p_qty", 0)
-                df["_p_date"] = df.get("_p_date", pd.NaT)
-                df["_p_order"] = df.get("_p_order", "N/A")
-                df["_p_phone"] = df.get("_p_phone", "N/A")
-                df["_p_email"] = df.get("_p_email", "N/A")
+                # 🛡️ Initialize full internal schema with safe defaults
+                df["_p_name"] = "Unknown Product"
+                df["_p_cust_name"] = None
+                df["_p_cost"] = 0
+                df["_p_qty"] = 0
+                df["_p_date"] = pd.NaT
+                df["_p_order"] = None
+                df["_p_phone"] = None
+                df["_p_email"] = None
 
                 if "name" in m:
                     df["_p_name"] = df[m["name"]].astype(str)
@@ -319,8 +319,17 @@ def render_customer_pulse_tab():
 
     # Process UIDs across the entire master
     master["UID"] = master.get("_p_phone", pd.Series(dtype=str)).fillna(master.get("_p_email", pd.Series(dtype=str))).astype(str).str.strip().str.lower()
-    master = master[(master["UID"] != "") & (master["UID"] != "nan") & (master["UID"].notna())]
+    master = master[(master["UID"] != "") & (master["UID"] != "nan") & (master["UID"] != "n/a") & (master["UID"] != "none") & (master["UID"].notna())]
 
+    try:
+        render_customer_pulse_core(master, full_hist)
+    except Exception as e:
+        from src.core.errors import log_error
+        log_error(e, context="Customer Pulse Tab")
+        st.error(f"Pulse analysis failed: {e}")
+        st.info("💡 Try clicking 'Global Recovery -> Clear Cache' in the sidebar.")
+
+def render_customer_pulse_core(master, full_hist):
     if "_p_date" in master.columns:
         valid_dates = master[master["_p_date"].notna()]
         if not valid_dates.empty:
@@ -353,8 +362,8 @@ def render_customer_pulse_tab():
         "_p_date": "max"
     }).reset_index()
     freq.columns = ["UID", "Name", "Orders", "LifetimeValue", "LastActive"]
-    # Fallback for display
-    freq["Name"] = freq.apply(lambda x: x["UID"] if x["Name"] == "N/A" else x["Name"], axis=1)
+    # Fallback for display - handle both None and placeholder strings
+    freq["Name"] = freq["Name"].replace(["N/A", "None", None, ""], pd.NA).fillna(freq["UID"])
 
     returning_count = len(freq[freq["Orders"] > 1])
     retention_rate = (returning_count / unique_customers * 100) if unique_customers > 0 else 0
