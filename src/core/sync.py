@@ -3,6 +3,7 @@ import re
 from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlparse
 from html import unescape
+from src.utils.io import read_remote_csv
 
 DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBDukmkRJGgHjCRIAAwGmlWaiPwESXSp9UBXm3_sbs37bk2HxavPc62aobmL1cGWUfAKE4Zd6yJySO/pubhtml"
 PUBLISHED_SHEET_TAB_RE = re.compile(
@@ -10,14 +11,12 @@ PUBLISHED_SHEET_TAB_RE = re.compile(
     re.IGNORECASE,
 )
 
-from src.utils.io import read_remote_csv
-
 
 def _get_setting(key, default=None):
     try:
         if key in st.secrets:
             return st.secrets[key]
-    except:
+    except Exception:
         pass
     return default
 
