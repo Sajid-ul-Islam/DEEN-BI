@@ -242,6 +242,50 @@ def inject_base_styles():
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
+    /* ADVANCED MOTION EFFECTS */
+    @keyframes fadeInSlideUp {
+        0% { opacity: 0; transform: translateY(20px); filter: blur(10px); }
+        100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+
+    @keyframes glowPulse {
+        0% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
+        50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); }
+        100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.2); }
+    }
+
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+
+    .animate-entrance {
+        animation: fadeInSlideUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    .typewriter-text {
+        overflow: hidden;
+        white-space: nowrap;
+        border-right: 3px solid var(--neon-blue);
+        width: 0;
+        animation: typing 2s steps(40, end) forwards, blink-caret 0.75s step-end infinite;
+    }
+
+    @keyframes typing {
+        from { width: 0 }
+        to { width: 100% }
+    }
+
+    @keyframes blink-caret {
+        from, to { border-color: transparent }
+        50% { border-color: var(--neon-blue); }
+    }
+
+    .stButton>button:hover {
+        animation: glowPulse 1.5s infinite;
+        border-color: var(--neon-blue) !important;
+    }
+
     /* MOBILE PROTOCOL OVERRIDES */
     @media (max-width: 768px) {
         .hub-title { font-size: 2.3rem !important; margin-bottom: 0.2rem !important; }
@@ -258,7 +302,7 @@ def inject_base_styles():
 
 def render_header():
     header_html = f"""
-    <div style="text-align: center; padding: 3rem 0 1rem; margin-bottom: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%;">
+    <div class="animate-entrance" style="text-align: center; padding: 3rem 0 1rem; margin-bottom: 2rem; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%;">
         <div style="display: inline-block; position: relative; padding: 0 1rem;">
             <h1 class="hub-title" style="margin: 0 !important; padding: 0 !important; line-height: 1 !important; text-transform: none; letter-spacing: -0.04em !important; font-size: 3.8rem !important;">{APP_TITLE}</h1>
             <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: -6px; opacity: 1; padding: 0;">
@@ -268,9 +312,11 @@ def render_header():
                  <div style="height: 1.5px; background: linear-gradient(to left, transparent, var(--neon-blue)); flex-grow: 1; min-width: 20px;"></div>
             </div>
         </div>
-        <p style="color: var(--text-secondary); font-size: 0.8rem; letter-spacing: 0.15em; text-transform: uppercase; margin-top: 20px; opacity: 0.4; font-weight: 500;">
-            🛰️ NEXT-GEN OPS COMMAND • {APP_VERSION}
-        </p>
+        <div style="margin-top: 20px;">
+            <p class="typewriter-text" style="color: var(--text-secondary); font-size: 0.8rem; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.6; font-weight: 500; margin: 0 auto;">
+                🛰️ NEXT-GEN OPS COMMAND • {APP_VERSION}
+            </p>
+        </div>
     </div>"""
     st.markdown(header_html, unsafe_allow_html=True)
 

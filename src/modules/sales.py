@@ -358,6 +358,8 @@ def render_live_tab():
     )
     if st.button("🔄 Sync Now", use_container_width=True, key="live_sync_btn"):
         clear_sync_cache()
+        process_data.clear()
+        st.toast("⚡ Syncing Live Records...", icon="🔄")
         st.rerun()
     try:
         df, src, upd = load_shared_gsheet("LastDaySales")
