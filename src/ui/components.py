@@ -284,6 +284,44 @@ def to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     return output.read()
 
 
+def render_date_range_selector(key_prefix: str):
+    """Standardized date range selector with presets."""
+    from datetime import date, timedelta
+    st.markdown("#### 📅 Analysis Period")
+    
+    # Presets row
+    p1, p2, p3, p4 = st.columns(4)
+    abs_min = date(2022, 1, 1)
+    
+    if p1.button("This Month", key=f"{key_prefix}_tm_btn", use_container_width=True):
+        st.session_state.cust_start = date.today().replace(day=1)
+        st.session_state.cust_end = date.today()
+        st.rerun()
+    if p2.button("Last 90 Days", key=f"{key_prefix}_90_btn", use_container_width=True):
+        st.session_state.cust_start = date.today() - timedelta(days=90)
+        st.session_state.cust_end = date.today()
+        st.rerun()
+    if p3.button("Year to Date", key=f"{key_prefix}_ytd_btn", use_container_width=True):
+        st.session_state.cust_start = date(date.today().year, 1, 1)
+        st.session_state.cust_end = date.today()
+        st.rerun()
+    if p4.button("Full History", key=f"{key_prefix}_all_btn", use_container_width=True):
+         st.session_state.cust_start = abs_min
+         st.session_state.cust_end = date.today()
+         st.rerun()
+
+    c1, c2 = st.columns(2)
+    start = c1.date_input("From", value=st.session_state.cust_start, key=f"{key_prefix}_start_in")
+    end = c2.date_input("To", value=st.session_state.cust_end, key=f"{key_prefix}_end_in")
+    
+    if start != st.session_state.cust_start or end != st.session_state.cust_end:
+        st.session_state.cust_start = start
+        st.session_state.cust_end = end
+        st.rerun()
+        
+    return start, end
+
+
 def render_reset_confirm(state_key: str, reset_fn):
     if st.button("Reset current workflow", key=f"reset_{state_key}"):
         st.session_state[f"confirm_reset_{state_key}"] = True

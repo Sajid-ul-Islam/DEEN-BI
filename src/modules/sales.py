@@ -542,214 +542,99 @@ def get_all_statements_master(full_history: bool = False, force_refresh: bool = 
 
 
 def render_custom_period_tab():
-    section_card(
-        "📂 Historical Data Explorer", "Automated filtering with incremental loading."
-    )
-
-    # Check if we need full history
-    full_requested = st.toggle(
-        "Enable Full Deep-History (Fetches all years)",
-        value=False,
-        key="full_hist_toggle",
-    )
-
-    # Refresh action
-    if st.button("🔄 Rebuild Selected Dataset", use_container_width=True, key="rebuild_master_btn"):
+    section_card("📂 Sales Hub", "Interactive analysis with incremental multi-year syncing.")
+    
+    from src.ui.components import render_date_range_selector
+    
+    # 1. Period Selector (Always Visible)
+    cur_start, cur_end = render_date_range_selector("sales_hub")
+    
+    # 2. Sync Configuration
+    full_requested = st.toggle("Enable Deep-History (2022-2025)", value=st.session_state.get("full_hist_toggle", False), key="full_hist_toggle")
+    
+    if st.button("🔄 Sync Missing Data", use_container_width=True):
         get_all_statements_master(full_history=full_requested, force_refresh=True)
-        st.toast("⚡ Rebuilding Master Parquet Database...", icon="🔄")
+        st.toast("Syncing with cloud...", icon="📡")
         st.rerun()
 
+    st.divider()
+
+    # 3. Load & Filter
     master, msg = get_all_statements_master(full_history=full_requested)
     if master is None:
         st.error(msg)
         return
     
-    st.caption(f"📊 Status: {msg}")
+    st.caption(f"🛡️ Local Database: {msg}")
 
     if "_p_date" in master.columns:
-        valid_dates = master[master["_p_date"].notna()]
-        if valid_dates.empty:
-            st.warning("No dated records found.")
-            return
-
-        min_d, _max_d = (
-            valid_dates["_p_date"].min().date(),
-            valid_dates["_p_date"].max().date(),
-        )
-
-        # ALLOW SELECTION FROM 2022
-        abs_min = date(2022, 1, 1)
-
-        # Filter Presets
-        st.caption("⚡ Quick Date Presets")
-        fp1, fp2, fp3, fp4 = st.columns(4)
-        if fp1.button("📅 This Month", use_container_width=True):
-            st.session_state.cust_start = date.today().replace(day=1)
-            st.session_state.cust_end = date.today()
-            st.rerun()
-        if fp2.button("📅 Last 90 Days", use_container_width=True):
-            st.session_state.cust_start = date.today() - timedelta(days=90)
-            st.session_state.cust_end = date.today()
-            st.rerun()
-        if fp3.button("📅 Year to Date", use_container_width=True):
-            st.session_state.cust_start = date(date.today().year, 1, 1)
-            st.session_state.cust_end = date.today()
-            st.rerun()
-        if fp4.button("📅 Full History", use_container_width=True):
-             st.session_state.full_hist_toggle = True
-             st.session_state.cust_start = abs_min
-             st.session_state.cust_end = date.today()
-             st.rerun()
-
-        with st.form("date_filter_form"):
-            f1, f2 = st.columns(2)
-            default_start = max(min_d, date.today() - timedelta(days=90))
-            start = f1.date_input(
-                "Filter From",
-                default_start,
-                min_value=abs_min,
-                max_value=date.today(),
-                key="cust_start",
-            )
-            end = f2.date_input(
-                "Filter To",
-                date.today(),
-                min_value=abs_min,
-                max_value=date.today(),
-                key="cust_end",
-            )
-            submit = st.form_submit_button("⚡ Apply Period Filter", use_container_width=True)
-            
-        if not submit and "applied_start" not in st.session_state:
-            st.info("📅 Adjust dates and click 'Apply Period Filter' to load data.")
-            return
-
-        # Persist applied dates
-        if submit:
-            st.session_state.applied_start = start
-            st.session_state.applied_end = end
-            
-        cur_start = st.session_state.get("applied_start", start)
-        cur_end = st.session_state.get("applied_end", end)
-
-        # If user picked a date earlier than current master min, hint at full history
-        if cur_start < min_d and not full_requested:
-            st.info(
-                "💡 Selecting dates further back? Toggle 'Enable Full Deep-History' above."
-            )
-
         filtered = master[
             (master["_p_date"].dt.date >= cur_start) & (master["_p_date"].dt.date <= cur_end)
         ].copy()
-
+        
         if filtered.empty:
-            st.warning("No records found for this period in current view.")
+            st.warning(f"No records locally found for {cur_start} to {cur_end}. Try 'Sync Missing Data' above.")
             return
 
         mc = {
-            "name": "_p_name",
-            "cost": "_p_cost",
-            "qty": "_p_qty",
-            "date": "_p_date",
-            "order_id": "_p_order",
-            "phone": "_p_phone",
-            "email": "_p_email",
+            "name": "_p_name", "cost": "_p_cost", "qty": "_p_qty",
+            "date": "_p_date", "order_id": "_p_order",
+            "phone": "_p_phone", "email": "_p_email",
         }
         dr, sm, tp, tf, bk, filtered_df, tc = process_data(filtered, mc)
         if filtered_df is not None:
-            render_dashboard_output(
-                filtered_df,
-                dr,
-                sm,
-                tp,
-                tf,
-                bk,
-                "MasterDB",
-                "Incremental Load",
-                top_cust=tc,
-            )
+            render_dashboard_output(filtered_df, dr, sm, tp, tf, bk, "MasterDB", "Delta Sync", top_cust=tc)
     else:
-        st.error("Date column not found in database to support period filtering.")
+        st.error("Time-series column missing in current dataset.")
 
 
 def render_customer_pulse_tab():
-    section_card(
-        "👥 Customer Pulse",
-        "Cross-statement unique customer insights and loyalty metrics.",
-    )
-    if st.button(
-        "🔄 Refresh Pulse Data", use_container_width=True, key="refresh_pulse_btn"
-    ):
-        get_all_statements_master(full_history=st.session_state.get("pulse_hist_toggle", False), force_refresh=True)
+    section_card("👥 Customer Pulse", "LTV, retention, and scaling trends across history.")
+    
+    from src.ui.components import render_date_range_selector
+    cur_start, cur_end = render_date_range_selector("cust_pulse")
+    
+    full_requested = st.toggle("Access Deep History (2022-2025)", value=False, key="pulse_full_toggle")
+    
+    if st.button("🔄 Sync Customer Data", use_container_width=True, key="refresh_pulse_btn"):
+        get_all_statements_master(full_history=full_requested, force_refresh=True)
         st.toast("⚡ Updating Pulse Analytics...", icon="🔄")
         st.rerun()
 
-    # Check if we need full history for Pulse too
-    full_hist = st.toggle(
-        "Enable Full Deep-History Analytics", value=False, key="pulse_hist_toggle"
-    )
-
-    master, msg = get_all_statements_master(full_history=full_hist)
-    if master is None:
-        st.info("Pulse data not yet ready.")
+    master, msg = get_all_statements_master(full_history=full_requested)
+    if master is None or master.empty:
+        st.error(f"Failed to load customer foundation: {msg}")
         return
-
-    # Process UIDs across the entire master
+        
+    st.caption(f"🛡️ Database: {msg}")
+    
+    # Process UIDs across the entire master to find TRUE loyalists
     master["UID"] = (
         master.get("_p_phone", pd.Series(dtype=str))
         .fillna(master.get("_p_email", pd.Series(dtype=str)))
-        .astype(str)
-        .str.strip()
-        .str.lower()
+        .astype(str).str.strip().str.lower()
     )
-    master = master[
-        (master["UID"] != "")
-        & (master["UID"] != "nan")
-        & (master["UID"] != "n/a")
-        & (master["UID"] != "none")
-        & (master["UID"].notna())
-    ]
+    
+    # Filter based on visible date range
+    db = master[
+        (master["_p_date"].dt.date >= cur_start) & (master["_p_date"].dt.date <= cur_end)
+    ].copy()
+    
+    if db.empty:
+        st.info(f"No customer activity found between {cur_start} and {cur_end}. Try expanding the date range.")
+        return
 
     try:
-        render_customer_pulse_core(master, full_hist)
+        render_customer_pulse_core(db)
     except Exception as e:
         from src.core.errors import log_error
-
         log_error(e, context="Customer Pulse Tab")
         st.error(f"Pulse analysis failed: {e}")
         st.info("💡 Try clicking 'Global Recovery -> Clear Cache' in the sidebar.")
 
 
-def render_customer_pulse_core(master, full_hist):
-    if "_p_date" in master.columns:
-        valid_dates = master[master["_p_date"].notna()]
-        if not valid_dates.empty:
-            min_d = valid_dates["_p_date"].min().date()
-            abs_min = date(2022, 1, 1)
-            f1, f2 = st.columns(2)
-            default_pulse_start = max(min_d, date.today() - timedelta(days=90))
-            p_start = f1.date_input(
-                "Pulse From",
-                default_pulse_start,
-                min_value=abs_min,
-                max_value=date.today(),
-                key="pulse_start",
-            )
-            p_end = f2.date_input(
-                "Pulse To",
-                date.today(),
-                min_value=abs_min,
-                max_value=date.today(),
-                key="pulse_end",
-            )
-            db = master[
-                (master["_p_date"].dt.date >= p_start)
-                & (master["_p_date"].dt.date <= p_end)
-            ].copy()
-        else:
-            db = master.copy()
-    else:
-        db = master.copy()
+def render_customer_pulse_core(db):
+    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
 
     if db.empty:
         st.warning("No data found for selected pulse range.")

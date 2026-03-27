@@ -10,6 +10,8 @@ from src.core.paths import DATA_DIR, STATE_FILE, prepare_data_dirs
 prepare_data_dirs()
 
 
+from datetime import date, timedelta
+
 def save_state():
     """Saves relevant session state keys to a local file."""
     state_to_save = {}
@@ -19,6 +21,8 @@ def save_state():
         "inv_t_col",
         "pathao_res_df",
         "low_stock_threshold",
+        "cust_start",
+        "cust_end"
     ]
 
     for key in keys_to_persist:
@@ -69,6 +73,10 @@ def init_state():
     """Initialize defaults if not present."""
     if "low_stock_threshold" not in st.session_state:
         st.session_state.low_stock_threshold = 5
+    if "cust_start" not in st.session_state:
+        st.session_state.cust_start = date.today() - timedelta(days=90)
+    if "cust_end" not in st.session_state:
+        st.session_state.cust_end = date.today()
     load_state()
 
 
