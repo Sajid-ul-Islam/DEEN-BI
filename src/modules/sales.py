@@ -193,21 +193,19 @@ def render_story_summary(summ, tp, timeframe, bk):
 
 
 def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=None):
-    render_story_summary(summ, top, timeframe, basket)
-    st.markdown(f"### ⚡ Statement: {timeframe or 'All Records'}")
+    render_story_summary(sm, top_prod, tf, bk)
+    st.markdown(f"### ⚡ Statement: {tf or 'All Records'}")
     from src.ui.components import render_metric_hud
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        render_metric_hud("Items Sold", f"{summ['Total Qty'].sum():,.0f}", "📦")
+        render_metric_hud("Items Sold", f"{sm['Total Qty'].sum():,.0f}", "📦")
     with c2:
-        render_metric_hud("Total Orders", f"{basket['total_orders']:,}", "🛒")
+        render_metric_hud("Total Orders", f"{bk['total_orders']:,}", "🛒")
     with c3:
-        render_metric_hud(
-            "Total Revenue", f"TK {summ['Total Amount'].sum():,.0f}", "💰"
-        )
+        render_metric_hud("Total Revenue", f"TK {sm['Total Amount'].sum():,.0f}", "💰")
     with c4:
-        render_metric_hud("Avg Basket", f"TK {basket['avg_basket_value']:,.0f}", "🛍️")
+        render_metric_hud("Avg Basket", f"TK {bk['avg_basket_value']:,.0f}", "🛍️")
 
     # 📥 EXCEL EXPORT (Relocated to top to avoid confusion with page footer)
     try:
@@ -246,7 +244,7 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
     col1, col2 = st.columns(2)
     with col1:
         # Sort for color consistency
-        sorted_summ = summ.sort_values("Total Amount", ascending=False)
+        sorted_summ = sm.sort_values("Total Amount", ascending=False)
         fig_pie = px.pie(
             sorted_summ,
             values="Total Amount",
@@ -261,7 +259,7 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
             font_color=chart_font_color,
         )
         st.plotly_chart(
-            fig_pie, use_container_width=True, key=f"sales_pie_{source or 'default'}"
+            fig_pie, use_container_width=True, key=f"sales_pie_{src or 'default'}"
         )
 
     with col2:
@@ -280,7 +278,7 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
             font_color=chart_font_color,
         )
         st.plotly_chart(
-            fig_bar, use_container_width=True, key=f"sales_bar_{source or 'default'}"
+            fig_bar, use_container_width=True, key=f"sales_bar_{src or 'default'}"
         )
 
     # Analytics Tabs (Replaces "Detailed Product Breakdown" expander)
@@ -290,7 +288,7 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
 
     with analysis_tabs[0]:
         st.dataframe(
-            summ.sort_values("Total Amount", ascending=False),
+            sm.sort_values("Total Amount", ascending=False),
             use_container_width=True,
             hide_index=True,
         )
