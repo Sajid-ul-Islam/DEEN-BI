@@ -30,18 +30,24 @@ def inject_base_styles():
         letter-spacing: -0.02em;
     }
 
-    /* SIDEBAR NAV - PREVENT OVERLAP */
-    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] {
-        margin-bottom: 0.5rem !important;
+    /* PERIOD SELECTOR CARD */
+    .period-selector {
+        background: rgba(37, 99, 235, 0.05) !important;
+        padding: 1.5rem !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(37, 99, 235, 0.2) !important;
+        margin-bottom: 2rem !important;
+    }
+    .period-status {
+        font-size: 0.85rem !important;
+        background: #2563eb !important;
+        color: white !important;
+        padding: 6px 16px !important;
+        border-radius: 20px !important;
+        display: inline-block !important;
+        margin-top: 1rem !important;
         font-weight: 700 !important;
-    }
-    
-    [data-testid="stSidebar"] div[role="radiogroup"] {
-        gap: 8px !important;
-    }
-    
-    [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] {
-        color: var(--text-color) !important;
+        letter-spacing: 0.05em !important;
     }
 
     /* FLAT CARD SYSTEM - Using Native Background Variables */
@@ -285,34 +291,39 @@ def to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
 
 
 def render_date_range_selector(key_prefix: str):
-    """Standardized date range selector with presets."""
+    """Standardized date range selector with high-visibility feedback."""
     from datetime import date, timedelta
-    st.markdown("#### 📅 Analysis Period")
     
-    # Presets row
+    st.markdown("""<div class="period-selector">""", unsafe_allow_html=True)
+    st.markdown("#### 📅 Select Analysis Period")
+    
+    # Presets Row
     p1, p2, p3, p4 = st.columns(4)
     abs_min = date(2022, 1, 1)
     
-    if p1.button("This Month", key=f"{key_prefix}_tm_btn", use_container_width=True):
+    if p1.button("📊 This Month", key=f"{key_prefix}_tm_btn", use_container_width=True):
         st.session_state.cust_start = date.today().replace(day=1)
         st.session_state.cust_end = date.today()
         st.rerun()
-    if p2.button("Last 90 Days", key=f"{key_prefix}_90_btn", use_container_width=True):
+    if p2.button("🗓️ Last 90 Days", key=f"{key_prefix}_90_btn", use_container_width=True):
         st.session_state.cust_start = date.today() - timedelta(days=90)
         st.session_state.cust_end = date.today()
         st.rerun()
-    if p3.button("Year to Date", key=f"{key_prefix}_ytd_btn", use_container_width=True):
+    if p3.button("📈 Year to Date", key=f"{key_prefix}_ytd_btn", use_container_width=True):
         st.session_state.cust_start = date(date.today().year, 1, 1)
         st.session_state.cust_end = date.today()
         st.rerun()
-    if p4.button("Full History", key=f"{key_prefix}_all_btn", use_container_width=True):
+    if p4.button("🌍 Full History", key=f"{key_prefix}_all_btn", use_container_width=True):
          st.session_state.cust_start = abs_min
          st.session_state.cust_end = date.today()
          st.rerun()
 
     c1, c2 = st.columns(2)
-    start = c1.date_input("From", value=st.session_state.cust_start, key=f"{key_prefix}_start_in")
-    end = c2.date_input("To", value=st.session_state.cust_end, key=f"{key_prefix}_end_in")
+    start = c1.date_input("Analysis From", value=st.session_state.cust_start, key=f"{key_prefix}_start_in")
+    end = c2.date_input("Analysis To", value=st.session_state.cust_end, key=f"{key_prefix}_end_in")
+    
+    st.markdown(f"""<div class='period-status'>⚡ DASHBOARD ACTIVE: {start.strftime('%d %b %Y')} to {end.strftime('%d %b %Y')}</div>""", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     
     if start != st.session_state.cust_start or end != st.session_state.cust_end:
         st.session_state.cust_start = start
