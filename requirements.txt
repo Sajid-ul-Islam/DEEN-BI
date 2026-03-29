@@ -1,16 +1,18 @@
-# Core App
+# Core app and analytics
 streamlit
 pandas
 plotly
 openpyxl
 xlsxwriter
+pyarrow
 pillow
 beautifulsoup4
 
-# Fuzzy Matching
+# Parsing and matching
 rapidfuzz
+dateparser
 
-# Google & OpenAI API
+# Google Sheets and AI integrations
 google-api-python-client
 google-auth
 google-generativeai
@@ -18,5 +20,3 @@ openai
 
 # Utilities
 pyshorteners
-dateparser
-pyarrow

@@ -11,7 +11,7 @@ from src.ui.components import (
     section_card,
     render_mini_uploader,
 )
-from src.core.sync import load_shared_gsheet, clear_sync_cache
+from src.core.sync import LIVE_SALES_TAB_NAME, load_shared_gsheet, clear_sync_cache
 from src.ui.config import INVENTORY_LOCATIONS
 from src.utils.data import find_columns
 from src.engine.inventory import core as inv_core
@@ -51,7 +51,7 @@ def render_distribution_tab(search_q=None, guided: bool = True):
             ):
                 try:
                     clear_sync_cache()
-                    df_sync, source_name, _ = load_shared_gsheet("LastDaySales")
+                    df_sync, source_name, _ = load_shared_gsheet(LIVE_SALES_TAB_NAME)
                     st.session_state.inv_master_df = df_sync
                     st.session_state.inv_master_name = source_name
                     st.rerun()

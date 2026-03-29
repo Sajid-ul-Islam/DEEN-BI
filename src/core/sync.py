@@ -11,6 +11,8 @@ from src.utils.io import fetch_remote_csv_raw
 from src.core.paths import GSHEETS_RAW_DIR, GSHEETS_NORM_DIR, GSHEETS_MANIFEST
 
 DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTBDukmkRJGgHjCRIAAwGmlWaiPwESXSp9UBXm3_sbs37bk2HxavPc62aobmL1cGWUfAKE4Zd6yJySO/pubhtml"
+LIVE_SALES_TAB_NAME = "LatestSales"
+LIVE_SALES_TAB_ALIASES = {"latestsales", "lastdaysales"}
 PUBLISHED_SHEET_TAB_RE = re.compile(
     r'items\.push\(\{name:\s*"([^"]+)",\s*pageUrl:\s*"([^"]+)",\s*gid:\s*"([^"]+)"',
     re.IGNORECASE,
@@ -125,7 +127,7 @@ def load_sheet_with_cache(sheet_url, gid, tab_name, force_refresh=False):
 
     # Intelligent TTL based on volatility
     volatile = is_volatile(tab_name)
-    ttl_seconds = 300 if volatile else 2592000  # 5 min vs 30 days
+    ttl_seconds = 60 if volatile else 2592000  # 1 min vs 30 days
 
     # Check if we can use local cache immediately
     if cache_key in manifest and not force_refresh:
@@ -189,18 +191,24 @@ def load_sheet_with_cache(sheet_url, gid, tab_name, force_refresh=False):
         raise e
 
 
-def load_shared_gsheet(target_tab_name="LastDaySales", force_refresh=False):
+def load_shared_gsheet(target_tab_name=LIVE_SALES_TAB_NAME, force_refresh=False):
     """Modular loader for sharing Google Sheet data across all app modules."""
     sheet_url = _get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
-    tabs = load_published_sheet_tabs(sheet_url, force_refresh=force_refresh)
-    target = next(
-        (t for t in tabs if t["name"].lower() == target_tab_name.lower()),
-        None,
+    lookup_name = str(target_tab_name).strip().lower()
+    candidate_names = (
+        LIVE_SALES_TAB_ALIASES
+        if lookup_name in LIVE_SALES_TAB_ALIASES
+        else {lookup_name}
     )
+    tabs = load_published_sheet_tabs(sheet_url, force_refresh=force_refresh)
+    target = next((t for t in tabs if t["name"].lower() in candidate_names), None)
+
+    if not target and lookup_name in LIVE_SALES_TAB_ALIASES and not force_refresh:
+        tabs = load_published_sheet_tabs(sheet_url, force_refresh=True)
+        target = next((t for t in tabs if t["name"].lower() in candidate_names), None)
 
     if not target:
-        # If target not found by name, try fallback or error
-        if target_tab_name == "LastDaySales" and tabs:
+        if lookup_name in LIVE_SALES_TAB_ALIASES and tabs:
             target = tabs[0]
         else:
             raise ValueError(f"Target tab '{target_tab_name}' not found.")

@@ -146,9 +146,28 @@ def parse_dates(values: pd.Series) -> pd.Series:
     """Parse mixed order-date formats while keeping failed values as NaT."""
 
     def _parse_single(value):
+        if pd.isna(value):
+            return pd.NaT
+
+        # Handle numeric epochs and spreadsheet serials before string parsing.
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            num = float(value)
+            if num > 1_000_000_000_000:
+                return pd.to_datetime(num, unit="ms", errors="coerce")
+            if num > 1_000_000_000:
+                return pd.to_datetime(num, unit="s", errors="coerce")
+            if 20_000 < num < 80_000:
+                return pd.to_datetime(num, unit="D", origin="1899-12-30", errors="coerce")
+
         text = str(value).strip()
         if text in {"", "nan", "NaT", "None"}:
             return pd.NaT
+        if text.isdigit():
+            num = int(text)
+            if num > 1_000_000_000_000:
+                return pd.to_datetime(num, unit="ms", errors="coerce")
+            if num > 1_000_000_000:
+                return pd.to_datetime(num, unit="s", errors="coerce")
         iso_patterns = (
             "%Y-%m-%d",
             "%Y/%m/%d",

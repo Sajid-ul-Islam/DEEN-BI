@@ -1,130 +1,113 @@
+from datetime import date
+
 import streamlit as st
 
 st.set_page_config(
     page_title="DEEN Commerce | Ops Command",
-    page_icon="⚡",
+    page_icon="DC",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 
 def run_app():
-    # Lazy imports keep bootstrap resilient on cloud when a module has runtime incompatibilities.
-    from src.modules.ai import render_ai_chat_tab
-    from src.modules.inventory import render_distribution_tab
     from src.core.errors import get_logs
+    from src.core.persistence import init_state, save_state
+    from src.modules.ai import render_ai_chat_tab
+    from src.modules.ecommerce import render_wp_tab
+    from src.modules.inventory import render_distribution_tab
+    from src.modules.logistics import render_pathao_tab
     from src.modules.parser import render_fuzzy_parser_tab
+    from src.modules.sales import (
+        render_cache_health_panel,
+        render_custom_period_tab,
+        render_customer_pulse_tab,
+        render_data_completeness_report,
+        render_live_tab,
+    )
     from src.modules.tools import (
         render_daily_summary_export_tab,
         render_data_quality_monitor_tab,
     )
-    from src.modules.logistics import render_pathao_tab
-    from src.core.persistence import init_state, save_state
-    from src.modules.sales import (
-        render_custom_period_tab,
-        render_live_tab,
-        render_customer_pulse_tab,
-        render_cache_health_panel,
-        render_data_completeness_report
-    )
     from src.modules.woo_report import render_wp_api_orders_tab
-    from src.ui.components import inject_base_styles, render_header
-    from src.modules.whatsapp import render_whatsapp_api_tab
-    from src.modules.ecommerce import render_wp_tab
+    from src.ui.components import inject_base_styles, render_header, render_sidebar_shell
 
     init_state()
     inject_base_styles()
-    
+
     with st.sidebar:
-        # --- BRANDING IDENTITY ---
-        st.markdown("""
-            <div style="background: rgba(37, 99, 235, 0.05); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(37, 99, 235, 0.1); margin-bottom: 2rem;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 0.75rem;">
-                    <img src="https://cdn.brandfetch.io/deencommerce.com" width="35" style="border-radius: 6px;">
-                    <a href="https://deencommerce.com" target="_blank" style="text-decoration: none; color: inherit; font-size: 1rem; font-weight: 800; letter-spacing: 0.05em;">DEEN COMMERCE</a>
-                </div>
-                <div style="font-size: 0.7rem; font-weight: 800; color: #3b82f6; letter-spacing: 0.2rem; text-transform: uppercase; margin-left: 47px;">⚡ OPS COMMAND</div>
-            </div>
-        """, unsafe_allow_html=True)
-        
+        render_sidebar_shell()
+
         if "main_nav" not in st.session_state:
-            st.session_state.main_nav = "📡 Live Sync"
-            
+            st.session_state.main_nav = "Live Queue"
+
         nav_options = [
-            "📡 Live Sync",
-            "📂 Sales Hub",
-            "👥 Customers",
-            "🚛 Operations",
-            "🛠️ System"
+            "Live Queue",
+            "Sales Analysis",
+            "Customer Pulse",
+            "Operations",
+            "System",
         ]
-        
-        st.markdown("#### Navigation Hub")
+
+        st.caption("Navigation")
         st.session_state.main_nav = st.radio(
             "Navigation",
             nav_options,
-            index=nav_options.index(st.session_state.main_nav) if st.session_state.main_nav in nav_options else 0,
+            index=nav_options.index(st.session_state.main_nav)
+            if st.session_state.main_nav in nav_options
+            else 0,
             key="main_nav_radio",
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
-        
-        st.divider()
-        st.markdown("#### Operational State")
-        
-        if st.button("💾 Persist State", use_container_width=True):
+
+        st.caption("Actions")
+        if st.button("Save State", use_container_width=True):
             save_state()
-            st.toast("✅ State Secured")
-            
-        st.divider()
-        st.markdown("#### Saved Views")
-        if st.button("📅 Today's Live", use_container_width=True):
-             st.session_state.main_nav = "📡 Live Sync"
-             st.rerun()
-        if st.button("📈 This Month", use_container_width=True):
-             st.session_state.main_nav = "📂 Sales Hub"
-             st.session_state.cust_start = date.today().replace(day=1)
-             st.session_state.cust_end = date.today()
-             st.rerun()
-        if st.button("💎 VIP Pulse", use_container_width=True):
-             st.session_state.main_nav = "👥 Customers"
-             st.rerun()
-        if st.button("🚨 Failed Syncs", use_container_width=True):
-             st.session_state.main_nav = "🛠️ System"
-             # Assuming s_sub is controlled by state in next version or we just go to System
-             st.rerun()
-        
-        st.divider()
-        st.markdown("### 🔄 Global Recovery")
-        if st.button("Clear Cache & Rerun", use_container_width=True):
+            st.toast("State saved")
+        if st.button("Open This Month", use_container_width=True):
+            st.session_state.main_nav = "Sales Analysis"
+            st.session_state.cust_start = date.today().replace(day=1)
+            st.session_state.cust_end = date.today()
+            st.rerun()
+        if st.button("Clear Cache", use_container_width=True):
             st.cache_data.clear()
-            st.session_state.clear()
             st.rerun()
 
     render_header()
 
-    # SECTION ROUTING
-    if st.session_state.main_nav == "📡 Live Sync":
+    if st.session_state.main_nav == "Live Queue":
         render_live_tab()
-        
-    elif st.session_state.main_nav == "📂 Sales Hub":
+    elif st.session_state.main_nav == "Sales Analysis":
         render_custom_period_tab()
-        
-    elif st.session_state.main_nav == "👥 Customers":
+    elif st.session_state.main_nav == "Customer Pulse":
         render_customer_pulse_tab()
-        
-    elif st.session_state.main_nav == "🚛 Operations":
+    elif st.session_state.main_nav == "Operations":
         sub_nav = ["Pathao", "Parser", "Inventory", "WhatsApp", "WooCommerce"]
-        sub = st.segmented_control("Operations Hub", sub_nav, selection_mode="single", default="Pathao")
-        
-        if sub == "Pathao": render_pathao_tab(guided=False)
-        elif sub == "Parser": render_fuzzy_parser_tab(guided=False)
-        elif sub == "Inventory": render_distribution_tab(search_q=st.session_state.get("inv_matrix_search", ""), guided=False)
-        elif sub == "WhatsApp": render_wp_tab(guided=False)
-        elif sub == "WooCommerce": render_wp_api_orders_tab()
-        
-    elif st.session_state.main_nav == "🛠️ System":
+        sub = st.segmented_control(
+            "Operations Hub",
+            sub_nav,
+            selection_mode="single",
+            default="Pathao",
+        )
+
+        if sub == "Pathao":
+            render_pathao_tab(guided=False)
+        elif sub == "Parser":
+            render_fuzzy_parser_tab(guided=False)
+        elif sub == "Inventory":
+            render_distribution_tab(
+                search_q=st.session_state.get("inv_matrix_search", ""), guided=False
+            )
+        elif sub == "WhatsApp":
+            render_wp_tab(guided=False)
+        elif sub == "WooCommerce":
+            render_wp_api_orders_tab()
+    elif st.session_state.main_nav == "System":
         s_nav = ["Health", "Exports", "AI Analyst", "Logs"]
-        s_sub = st.segmented_control("System Tools", s_nav, selection_mode="single", default="Health")
-        
+        s_sub = st.segmented_control(
+            "System Tools", s_nav, selection_mode="single", default="Health"
+        )
+
         if s_sub == "Health":
             render_cache_health_panel()
             st.divider()
@@ -141,11 +124,10 @@ def run_app():
                 for entry in reversed(logs):
                     st.error(f"[{entry['timestamp']}] {entry['context']}: {entry['error']}")
             else:
-                st.success("System core stable. 0 anomalies detected.")
+                st.success("System stable. No logged anomalies.")
 
-    # Footer
     st.markdown("---")
-    st.caption("© 2026 DEEN COMMERCE • Powered by Antigravity AI Engine")
+    st.caption("DEEN Commerce | 2026")
 
 
 if __name__ == "__main__":
@@ -153,6 +135,7 @@ if __name__ == "__main__":
         run_app()
     except Exception as exc:
         from src.core.errors import log_error
+
         log_error(exc, context="Main App Bootstrap")
-        st.error("Critical: Application failed to render.")
+        st.error("Critical: application failed to render.")
         st.code(str(exc))
