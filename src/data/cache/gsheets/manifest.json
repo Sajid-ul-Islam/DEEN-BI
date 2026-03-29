@@ -1,0 +1,47 @@
+{
+  "tabs_docs.google.com": {
+    "fetched_at": "2026-03-29T09:45:34.457671+00:00",
+    "tabs": [
+      {
+        "name": "LatestSales",
+        "gid": "0"
+      },
+      {
+        "name": "2026",
+        "gid": "436235820"
+      },
+      {
+        "name": "2025",
+        "gid": "650598355"
+      },
+      {
+        "name": "2024",
+        "gid": "1926926142"
+      },
+      {
+        "name": "2023",
+        "gid": "1563731937"
+      },
+      {
+        "name": "2022",
+        "gid": "714428268"
+      }
+    ]
+  },
+  "gid_0": {
+    "gid": "0",
+    "tab_name": "LatestSales",
+    "etag": null,
+    "last_modified": null,
+    "fetched_at": "2026-03-29T09:45:38.458155+00:00",
+    "row_count": 47
+  },
+  "gid_436235820": {
+    "gid": "436235820",
+    "tab_name": "2026",
+    "etag": null,
+    "last_modified": null,
+    "fetched_at": "2026-03-29T10:08:47.195269+00:00",
+    "row_count": 6075
+  }
+}

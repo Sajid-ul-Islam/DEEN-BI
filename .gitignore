@@ -64,7 +64,7 @@ venv.bak/
 .idea/
 
 # Application Data (Important)
-data/
+/data/
 *.xlsx
 *.csv
 !tests/*.csv
