@@ -94,7 +94,7 @@ def render_wp_tab(guided: bool = True):
 
             df_sync, _, _ = load_shared_gsheet()
             st.session_state.wp_preview_df = df_sync
-            st.session_state.wp_upload_name = "LiveSync_LastDaySales"
+            st.session_state.wp_upload_name = "LiveSync_LatestSales"
             st.rerun()
     with c2:
         wp_file = st.file_uploader(
@@ -160,6 +160,7 @@ def render_wp_tab(guided: bool = True):
             to_excel_bytes(links_df),
             "WhatsApp_Links.xlsx",
             key="ec_ex_xl",
+            use_container_width=True,
         )
 
-    render_reset_confirm("wp", _reset_wp_state)
+    render_reset_confirm("WhatsApp Verification", "wp", _reset_wp_state)

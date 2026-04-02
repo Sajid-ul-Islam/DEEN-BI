@@ -11,7 +11,7 @@ from src.ui.components import (
     section_card,
     render_mini_uploader,
 )
-from src.core.sync import load_shared_gsheet, clear_sync_cache
+from src.core.sync import LIVE_SALES_TAB_NAME, load_shared_gsheet, clear_sync_cache
 from src.ui.config import INVENTORY_LOCATIONS
 from src.utils.data import find_columns
 from src.engine.inventory import core as inv_core
@@ -51,7 +51,7 @@ def render_distribution_tab(search_q=None, guided: bool = True):
             ):
                 try:
                     clear_sync_cache()
-                    df_sync, source_name, _ = load_shared_gsheet("LastDaySales")
+                    df_sync, source_name, _ = load_shared_gsheet(LIVE_SALES_TAB_NAME)
                     st.session_state.inv_master_df = df_sync
                     st.session_state.inv_master_name = source_name
                     st.rerun()
@@ -163,6 +163,7 @@ def render_distribution_tab(search_q=None, guided: bool = True):
                 "Stock_Distribution.xlsx",
                 type="primary",
                 key="inv_ex_btn",
+                use_container_width=True,
             )
 
     with i_tab:
@@ -173,6 +174,7 @@ def render_distribution_tab(search_q=None, guided: bool = True):
                 st.session_state.inv_t_col,
             )
             from src.ui.components import render_plotly_chart
+
             c1, c2 = st.columns(2)
             with c1:
                 melt = df.melt(
@@ -187,7 +189,7 @@ def render_distribution_tab(search_q=None, guided: bool = True):
                     title="Stock Heatmap",
                 )
                 render_plotly_chart(fig_hm, key="inv_heatmap")
-                
+
             with c2:
                 tots = df[locs].apply(pd.to_numeric, errors="coerce").fillna(0).sum()
                 fig_pie = px.pie(
@@ -220,4 +222,4 @@ def render_distribution_tab(search_q=None, guided: bool = True):
         else:
             st.info("Run analysis to see pick list.")
 
-    render_reset_confirm("inventory", _reset_inventory_state)
+    render_reset_confirm("Distribution Hub", "inventory", _reset_inventory_state)

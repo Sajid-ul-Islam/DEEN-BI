@@ -1,35 +1,69 @@
-# Automation Pivot 🚀
+# Automation Pivot
 
-**Automation Pivot** is a high-performance Streamlit command center for unified e-commerce operations, unique customer growth tracking, and inventory distribution.
+Automation Pivot is a Streamlit operations dashboard for DEEN Commerce. It combines live order monitoring, historical sales analysis, customer tracking, logistics workflows, and inventory tools in one workspace.
 
-## 🚀 Key Features
+## What It Does
 
-*   **📡 Live Stream Dashboard**: Real-time sales performance synchronized with GSheet masters.
-*   **👥 Customer Pulse**: Unique customer acquisition tracking, VIP loyalty leaderboards, and historical retention metrics back to 2022.
-*   **📂 Total Sales Report**: Dynamic filtering and multi-statement master synchronization with incremental loading.
-*   **🚛 Logistics HUB**: High-speed Pathao order processing and delivery text parsing.
-*   **🏠 Inventory Command**: Matrix analyzer for multi-location stock mapping and pick listings.
+- `Live Queue`: Uses the `LatestSales` Google Sheet tab as the live operational queue for packing, shipping, and archive review.
+- `Sales Analysis`: Uses the local workbook core in `src/data/TotalOrder_TillLastTime.xlsx` and merges only fresh `2026` rows from Google Sheets.
+- `Customer Pulse`: Tracks customer growth, retention, CLV, and top customers across the selected date range.
+- `Operations`: Includes Pathao processing, parser tools, inventory distribution, WhatsApp export, and WooCommerce helpers.
+- `System`: Includes cache health, data completeness, exports, AI tools, and logs.
 
-## 🎨 UI/UX Philosophy
+## Data Model
 
-*   **Midnight Command Center**: Glassmorphism aesthetic with neon-blue accents.
-*   **Executive Narrative**: Automated conversational storytelling for performance insights.
-*   **Adaptive Theme**: Full support for system Light/Dark mode switching.
-*   **Responsive Flow**: Guided upload -> validate -> analyze -> export workflows.
+Historical analysis does not depend on Google Sheets for old years.
 
-## 🛠️ Project Structure
+- `2022`, `2023`, `2024`, `2025`, and `2026-tillLastTime` are loaded from `src/data/TotalOrder_TillLastTime.xlsx`
+- `2026` is checked in Google Sheets for rows that are newer than the workbook snapshot
+- `LatestSales` is treated as the live queue for in-process orders
+- `2026` is treated as the archive or completed-order ledger
 
-The codebase follows a strictly modular **`src/`** hierarchy for scalability:
+## UI Principles
 
-*   `src/core/`: Foundation logic (paths, sync, state management).
-*   `src/modules/`: High-level domain features (sales, inventory, logistics).
-*   `src/engine/`: Data processing and calculation logic.
-*   `src/ui/`: Components, styling, and navigation config.
-*   `src/utils/`: Shared generic utilities (data, I/O).
+- Single light theme with consistent contrast across cards, tables, forms, tabs, and alerts
+- KPI-first layouts for Live Queue, Sales Analysis, and Customer Pulse
+- Reduced noise, fewer redundant panels, and clearer date-range context
+- Shared visual pattern across operational and analytical screens
 
-## ⚡ Run Locally
+## Project Structure
+
+- `app.py`: App entrypoint and top-level navigation
+- `src/core/`: Sync, archive, paths, state, and error handling
+- `src/data/`: Normalized sales data helpers and local workbook assets
+- `src/services/`: Live queue and master sales services
+- `src/modules/`: Sales, logistics, inventory, parser, AI, and system views
+- `src/ui/`: Shared components and styling
+- `src/utils/`: Generic helpers for data and file I/O
+
+## Local Setup
 
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
+
+## Google Sheets Configuration
+
+Set `GSHEET_URL` to the published sheet URL if you are not using the default workbook.
+
+For write access and archive automation, configure:
+
+- `GSHEET_SPREADSHEET_ID` or `GSHEET_EDIT_URL`
+- `GSHEET_SERVICE_ACCOUNT_JSON`
+- or `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_PRIVATE_KEY`
+
+## Live Archive Automation
+
+The live dashboard can move finished rows from `LatestSales` into `2026`.
+
+- Add one control column in `LatestSales`: `Archive Status`, `Sync Status`, `Sync to 2026`, or `Archive to 2026`
+- Mark rows with one of these values: `ready`, `done`, `completed`, `shipped`, `archive`, `synced`
+- Set `AUTO_ARCHIVE_LATESTSALES=true` to run archive automatically on live-page refresh
+- `AUTO_ARCHIVE_LASTDAYSALES=true` is still accepted for backward compatibility
+
+## Notes
+
+- Sales Analysis and Customer Pulse now use page-specific date range state
+- KPI summaries and charts in those views reflect the selected date range
+- Live Queue always reflects the current `LatestSales` tab

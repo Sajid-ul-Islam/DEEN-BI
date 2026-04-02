@@ -1,22 +1,43 @@
-import streamlit as st
+import json
+import os
+from datetime import date, datetime, timedelta, timezone
+
 import pandas as pd
 import plotly.express as px
-import os
-import json
-from datetime import date, datetime, timedelta, timezone
+import streamlit as st
+import streamlit.components.v1 as components
+
 from src.core.categories import get_category_for_sales
 from src.core.paths import prepare_data_dirs, SYSTEM_LOG_FILE
-from src.ui.components import section_card
-from src.utils.data import find_columns, parse_dates
 from src.core.sync import (
-    load_shared_gsheet,
-    load_published_sheet_tabs,
-    clear_sync_cache,
     DEFAULT_GSHEET_URL,
+    LIVE_SALES_TAB_NAME,
+    clear_sync_cache,
+    load_published_sheet_tabs,
+    load_shared_gsheet,
 )
+from src.services.live_ops import (
+    LIVE_STREAM_REFRESH_SECONDS,
+    load_live_queue,
+    run_archive_if_requested,
+)
+from src.services.master_sales import load_master_sales_dataset
+from src.data.normalized_sales import (
+    CANONICAL_COLUMNS,
+    compute_sales_analytics,
+    normalize_sales_dataframe,
+)
+from src.ui.components import (
+    render_ops_hero,
+    render_ops_kpi,
+    render_ops_list,
+    render_reset_confirm,
+    section_card,
+)
+from src.utils.data import find_columns, parse_dates
 
 # CONFIGURATION
-TOTAL_SALES_EXCLUDED_TABS = {"lastdaysales"}
+TOTAL_SALES_EXCLUDED_TABS = {"lastdaysales", "latestsales"}
 prepare_data_dirs()
 
 # --- SYSTEM HELPERS ---
@@ -48,7 +69,7 @@ def get_setting(key, default=None):
 
 
 def get_custom_report_tab_label():
-    return "📂 Total Sales Report"
+    return "Total Sales Report"
 
 
 # --- ANALYTICS ENGINE ---
@@ -56,21 +77,22 @@ def get_custom_report_tab_label():
 
 @st.cache_data(show_spinner=False, max_entries=20)
 def process_data(df, selected_cols):
+    """
+    Legacy wrapper that now leverages src.data.normalized_sales logic 
+    for consistency across the application.
+    """
     try:
         df = df.copy()
-        df["Internal_Name"] = (
-            df[selected_cols["name"]].fillna("Unknown Product").astype(str)
-        )
-        df["Internal_Cost"] = pd.to_numeric(
-            df[selected_cols["cost"]], errors="coerce"
-        ).fillna(0)
-        df["Internal_Qty"] = pd.to_numeric(
-            df[selected_cols["qty"]], errors="coerce"
-        ).fillna(0)
-
-        # New: Customer Name support
+        
+        # Map internal names for analytics if needed
+        # Mapping logic to convert selected_cols format to normalize_sales_dataframe expectations
+        # However, for simplicity and to maintain current behavior, we ensure Internal columns exist
+        df["item_name"] = df[selected_cols["name"]].fillna("Unknown Product").astype(str)
+        df["unit_price"] = pd.to_numeric(df[selected_cols["cost"]], errors="coerce").fillna(0)
+        df["qty"] = pd.to_numeric(df[selected_cols["qty"]], errors="coerce").fillna(0)
+        
         c_col = selected_cols.get("customer_name")
-        df["Internal_Customer"] = (
+        df["customer_name"] = (
             df[c_col].fillna("Unknown Customer").astype(str)
             if c_col and c_col in df.columns
             else "N/A"
@@ -154,11 +176,6 @@ def process_data(df, selected_cols):
                 "avg_basket_value": og["Total Amount"].mean(),
                 "total_orders": len(og),
             }
-            
-            # USER REQUEST: Order number should count total unique phone numbers
-            phone_col = selected_cols.get("phone")
-            if phone_col and phone_col in df.columns:
-                bk["total_orders"] = df[phone_col].nunique()
 
         return drill, summ, top_products, tf, bk, df, top_customers
     except Exception as e:
@@ -171,49 +188,225 @@ def render_story_summary(summ, tp, timeframe, bk):
     if summ is None or summ.empty:
         return
 
-    total_rev = summ["Total Amount"].sum()
-    top_cat = summ.sort_values("Total Amount", ascending=False)
-    if top_cat.empty: return
-    top_cat_name = top_cat.iloc[0]["Category"]
-    orders = bk.get("total_orders", 0)
-
-    st.markdown(f"""
-    <div style="background: var(--surface-bg); border: 1px solid var(--surface-border); border-left: 4px solid var(--accent-primary); padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem;">
-        <div style="font-size: 0.95rem; color: var(--text-primary); line-height: 1.4;">
-            <b>{timeframe or 'Overview'} Analysis:</b> Total revenue of <b>TK {total_rev:,.0f}</b> from <b>{orders:,} orders</b>. 
-            Top performance in <b>{top_cat_name}</b>. Average basket: <b>TK {bk.get('avg_basket_value', 0):,.0f}</b>.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# --- UI RENDERING ---
-
-
-def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=None):
-    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
-    color_scale = "Blues_r" if is_dark else "Plasma"
+    ins = []
     
-    render_story_summary(sm, top_prod, tf, bk)
-    st.markdown(f"### ⚡ Statement: {tf or 'All Records'}")
-    from src.ui.components import render_metric_hud, render_status_strip
+    # 1. Revenue & Growth (Sales Analysis Context)
+    if sm is not None and not sm.empty:
+        total_rev = sm["Total Amount"].sum()
+        if deltas and deltas.get("rev") is not None:
+            dr = deltas["rev"]
+            if dr > 15:
+                ins.append(f"🟢 **Growth Alert**: Revenue is surging up **{dr:.1f}%** compared to the previous period. High momentum detected!")
+            elif dr < -15:
+                ins.append(f"🔴 **Sales Gap**: Revenue is down **{abs(dr):.1f}%**. Suggest reviewing pricing or running a re-engagement campaign.")
+        
+        # Categorical Insights
+        sorted_sm = sm.sort_values("Total Amount", ascending=False)
+        if not sorted_sm.empty:
+            top_cat = sorted_sm.iloc[0]["Category"]
+            top_share = (sorted_sm.iloc[0]["Total Amount"] / max(total_rev, 1)) * 100
+            ins.append(f"📊 **Inventory Focus**: '{top_cat}' is your top performer, core to {top_share:.1f}% of your gross revenue.")
 
-    render_status_strip(source=src or "Local", rows=len(df), last_refresh=upd or "N/A", status="Active Dataset ✅")
+    # 2. Customer Activity (Pulse Context)
+    if cust_metrics:
+        retention = cust_metrics.get("retention", 0)
+        if retention < 15:
+            ins.append("💡 **Retention Opportunity**: Most customers are one-time buyers. Suggest a loyalty discount for the 2nd order.")
+        elif retention > 35:
+            ins.append("✨ **Brand Loyalty**: Your retention rate is excellent! Your core audience is returning frequently.")
+        
+        avg_clv = cust_metrics.get("avg_clv", 0)
+        if avg_clv > 2500:
+             ins.append(f"💰 **High Value Base**: Avg customer spend is **TK {avg_clv:,.0f}**. Your audience has high purchasing power.")
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        render_metric_hud("Items Sold", f"{sm['Total Qty'].sum():,.0f}", "📦")
-    with c2:
-        render_metric_hud("Total Orders", f"{bk['total_orders']:,}", "🛒")
-    with c3:
-        render_metric_hud("Total Revenue", f"TK {sm['Total Amount'].sum():,.0f}", "💰")
-    with c4:
-        render_metric_hud("Avg Basket", f"TK {bk['avg_basket_value']:,.0f}", "🛍️")
+    # 3. Basket Size (Generic)
+    if bk:
+        avg_qty = bk.get("avg_basket_qty", 0)
+        if avg_qty < 1.3:
+            ins.append(f"🛒 **Upsell Hint**: Average basket size is low ({avg_qty:.1f} items). Consider 'Frequently Bought Together' bundles.")
 
-    # 📥 EXCEL EXPORT (Relocated to top to avoid confusion with page footer)
+    if ins:
+        st.markdown(
+            f"""
+            <div style="background:var(--accent-soft); border:1px solid #bfdbfe; border-radius:18px; padding:1.15rem; margin-bottom:1.25rem;">
+                <div style="font-size:0.72rem; color:var(--accent-strong); font-weight:800; text-transform:uppercase; letter-spacing:0.12em; margin-bottom:0.65rem;">System Insights & Suggestions</div>
+                <div style="display:flex; flex-direction:column; gap:0.65rem;">
+                    {"".join(f"<div style='font-size:0.88rem; color:var(--text-strong);'> {i}</div>" for i in ins)}
+                </div>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+
+
+def render_dashboard_output(
+    df,
+    dr,
+    sm,
+    top_prod,
+    tf,
+    bk,
+    src,
+    upd,
+    top_cust=None,
+    show_full_raw=False,
+    display_period=None,
+    prev_metrics=None,
+):
+    """
+    Core dashboard renderer for Sales Analysis and historical reports.
+    Now supports Period-over-Period (PoP) comparison via prev_metrics.
+    """
+    # Calculate deltas for comparative analytics
+    deltas = {}
+    if prev_metrics:
+        p_sm = prev_metrics.get("sm")
+        p_bk = prev_metrics.get("bk")
+        
+        # Revenue Delta
+        curr_rev = sm["Total Amount"].sum() if not sm.empty else 0
+        prev_rev = p_sm["Total Amount"].sum() if (p_sm is not None and not p_sm.empty) else 0
+        if prev_rev > 0:
+            deltas["rev"] = (curr_rev - prev_rev) / prev_rev * 100
+            
+        # Quantity Delta
+        curr_qty = sm["Total Qty"].sum() if not sm.empty else 0
+        prev_qty = p_sm["Total Qty"].sum() if (p_sm is not None and not p_sm.empty) else 0
+        if prev_qty > 0:
+            deltas["qty"] = (curr_qty - prev_qty) / prev_qty * 100
+            
+        # Orders Delta
+        curr_ords = bk.get("total_orders", 0)
+        prev_ords = p_bk.get("total_orders", 0) if p_bk else 0
+        if prev_ords > 0:
+            deltas["orders"] = (curr_ords - prev_ords) / prev_ords * 100
+    pie_colors = ["#2563eb", "#0f766e", "#ea580c", "#7c3aed", "#0891b2", "#be185d"]
+    from io import BytesIO
+    from src.ui.components import render_plotly_chart, render_status_strip
+
+    sorted_summ = sm.sort_values("Total Amount", ascending=False).copy()
+    unique_customers = compute_unique_customer_count(df)
+
+    render_ops_hero(
+        "Sales Analysis",
+        "Historical sales performance with PoP comparative analytics active.",
+        [
+            f"Period {display_period or tf or 'All Records'}",
+            f"PoP Analytics {'Enabled' if prev_metrics else 'Off'}",
+            f"Refresh {upd or 'N/A'}",
+        ],
+    )
+    render_status_strip(
+        source=src or "Local",
+        rows=len(df),
+        last_refresh="N/A",
+        status="Active Dataset",
+    )
+    
+    # NEW: Automated Insights
+    render_automated_insights(df, sm, bk, deltas=deltas)
+    
+    st.caption(f"Charts and KPIs reflect {display_period or tf or 'the selected period'}.")
+
+    top_row = st.columns(4)
+    with top_row[0]:
+        render_ops_kpi(
+            "Items Sold", f"{sm['Total Qty'].sum():,.0f}", "Units shipped", delta=deltas.get("qty")
+        )
+    with top_row[1]:
+        render_ops_kpi(
+            "Unique Orders",
+            f"{bk['total_orders']:,}",
+            f"From {bk['total_orders']:,} checkouts",
+            delta=deltas.get("orders")
+        )
+    with top_row[2]:
+        render_ops_kpi(
+            "Grand Gross",
+            f"TK {sm['Total Amount'].sum():,.0f}",
+            "Gross line revenue",
+            delta=deltas.get("rev")
+        )
+    with top_row[3]:
+        render_ops_kpi(
+            "Avg Basket Value",
+            f"TK {bk['avg_basket_value']:,.0f}",
+            f"Avg {bk['avg_basket_qty']:.1f} items per basket",
+        )
+
+    render_reset_confirm("Sales Analytics", "sales_ana", clear_sync_cache)
+
+    chart_a, chart_b = st.columns(2)
+    with chart_a:
+        fig_pie = px.pie(
+            sm.sort_values("Total Amount", ascending=False),
+            values="Total Amount",
+            names="Category",
+            hole=0.55,
+            title="Revenue Share by Category",
+            color_discrete_sequence=pie_colors,
+        )
+        render_plotly_chart(fig_pie, key=f"sales_pie_{src or 'default'}")
+
+    with chart_b:
+        fig_bar = px.bar(
+            sm.sort_values("Total Qty", ascending=True),
+            x="Total Qty",
+            y="Category",
+            orientation="h",
+            title="Volume by Category",
+            color="Total Qty",
+            color_continuous_scale="Blues",
+        )
+        render_plotly_chart(fig_bar, key=f"sales_bar_{src or 'default'}")
+
+    side_a, side_b = st.columns([1.35, 1])
+    with side_a:
+        st.markdown("#### Product View")
+        st.dataframe(
+            top_prod.head(25),
+            use_container_width=True,
+            hide_index=True,
+        )
+    with side_b:
+        render_ops_list(
+            [
+                ("Avg Basket Qty", f"{bk['avg_basket_qty']:.1f}"),
+                ("Avg basket TK", f"TK {bk['avg_basket_value']:,.0f}"),
+                ("Total Item", f"{sm['Total Qty'].sum():,.0f}"),
+                ("Total Unique Order", f"{bk['total_orders']:,}"),
+                ("Total Unique Customer", f"{compute_unique_customer_count(df):,}"),
+            ]
+        )
+
+    if display_period:
+        date_col = "_p_date" if "_p_date" in df.columns else None
+        if date_col is None and "order_date" in df.columns:
+            date_col = "order_date"
+        if date_col is not None:
+            trend_df = df.copy()
+            trend_df[date_col] = pd.to_datetime(trend_df[date_col], errors="coerce")
+            trend_df = trend_df.dropna(subset=[date_col])
+            if not trend_df.empty and "Total Amount" in trend_df.columns:
+                bucket = "D"
+                if trend_df[date_col].dt.date.nunique() > 62:
+                    bucket = "M"
+                revenue_trend = (
+                    trend_df.groupby(trend_df[date_col].dt.to_period(bucket))["Total Amount"]
+                    .sum()
+                    .reset_index()
+                )
+                revenue_trend[date_col] = revenue_trend[date_col].astype(str)
+                fig_trend = px.line(
+                    revenue_trend,
+                    x=date_col,
+                    y="Total Amount",
+                    title="Revenue Over Selected Range",
+                    markers=True,
+                )
+                render_plotly_chart(fig_trend, key=f"sales_trend_{src or 'default'}")
+
     try:
-        from io import BytesIO
-
         buf = BytesIO()
         with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
             sm.to_excel(writer, sheet_name="Summary", index=False)
@@ -228,138 +421,148 @@ def render_dashboard_output(df, dr, sm, top_prod, tf, bk, src, upd, top_cust=Non
         final_filename = f"Report_{clean_source}_{clean_tf}.xlsx"
 
         st.download_button(
-            label="📥 Export Analysis to Excel",
+            label="Export Analysis Workbook",
             data=buf.getvalue(),
             file_name=final_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+            use_container_width=False,
             key=f"dl_{src}_{tf}",
         )
     except Exception as e:
-        st.info(f"💡 Export engine standby. ({e})")
+        st.info(f"Export is unavailable right now. ({e})")
 
-    st.divider()
+    detail_tabs = st.tabs(["Category Summary", "Products", "Normalized Detail", "Source Data"])
 
-    col1, col2 = st.columns(2)
-    with col1:
-        # Sort for color consistency
-        sorted_summ = sm.sort_values("Total Amount", ascending=False)
-        fig_pie = px.pie(
-            sorted_summ,
-            values="Total Amount",
-            names="Category",
-            hole=0.5,
-            title="Revenue Share",
-            color_discrete_sequence=getattr(px.colors.sequential, color_scale),
-        )
-        from src.ui.components import render_plotly_chart
-        render_plotly_chart(fig_pie, key=f"sales_pie_{src or 'default'}")
-
-    with col2:
-        fig_bar = px.bar(
-            sorted_summ,
-            x="Total Amount",
-            y="Category",
-            orientation="h",
-            title="Category Performance",
-            color="Total Amount",
-            color_continuous_scale="Blues" if is_dark else "Viridis",
-        )
-        from src.ui.components import render_plotly_chart
-        render_plotly_chart(fig_bar, key=f"sales_bar_{src or 'default'}")
-
-    # Analytics Tabs (Replaces "Detailed Product Breakdown" expander)
-    analysis_tabs = st.tabs(
-        ["📑 Summary", "🏆 Product Rankings", "🔍 Drilldown", "💎 VIP Pulse"]
-    )
-
-    with analysis_tabs[0]:
+    with detail_tabs[0]:
         st.dataframe(
             sm.sort_values("Total Amount", ascending=False),
             use_container_width=True,
             hide_index=True,
         )
 
-    with analysis_tabs[1]:
+    with detail_tabs[1]:
         st.dataframe(
-            top_prod.head(20),
+            top_prod.head(50),
             use_container_width=True,
             hide_index=True,
         )
 
-    with analysis_tabs[2]:
-        st.markdown("### 🔍 Category Inspector")
-        if not dr.empty:
-            categories = ["All Categories"] + sorted(dr["Category"].unique().tolist())
-            selected_cat = st.selectbox(
-                "Filter Drilldown by Category",
-                categories,
-                key=f"drill_sel_{src}_{tf}",
-            )
+    with detail_tabs[2]:
+        # Extract normalized view using CANONICAL_COLUMNS
+        # Need to check if columns exist or have _p_ prefixes
+        disp = df.copy()
+        
+        # Mapping from _p_ prefix (master dataset) or Internal prefix to canonical
+        mapping = {
+            "_p_order": "order_id",
+            "_p_date": "order_date",
+            "_p_cust_name": "customer_name",
+            "_p_phone": "phone",
+            "_p_email": "email",
+            "_p_state": "state",
+            "_p_sku": "sku",
+            "_p_name": "item_name",
+            "_p_cost": "unit_price",
+            "_p_qty": "qty",
+            "_p_order_total": "order_total",
+            "_p_status": "order_status",
+            "_p_archive_status": "archive_status",
+            "Category": "category",
+            "Total Amount": "line_amount",
+        }
+        
+        for k, v in mapping.items():
+            if k in disp.columns and v not in disp.columns:
+                disp[v] = disp[k]
+        
+        cols_present = [c for c in CANONICAL_COLUMNS if c in disp.columns]
+        if not cols_present:
+             # Fallback to some basic columns if canonicals not found
+             cols_present = [c for c in disp.columns if not str(c).startswith('_')]
+        
+        search_norm = st.text_input(
+            "Filter normalized records",
+            key=f"search_norm_{src}_{tf}",
+            placeholder="Search by any field...",
+        ).lower()
+        
+        if search_norm:
+            mask = disp[cols_present].astype(str).apply(
+                lambda x: x.str.contains(search_norm, case=False, na=False)
+            ).any(axis=1)
+            disp = disp[mask]
+        
+        st.caption(f"Showing {len(disp):,} canonical records.")
+        st.dataframe(disp[cols_present], use_container_width=True, hide_index=True)
 
-            display_drill = dr
-            if selected_cat != "All Categories":
-                display_drill = dr[dr["Category"] == selected_cat]
-
-            st.dataframe(
-                display_drill.sort_values(["Category", "Price (TK)"]),
-                use_container_width=True,
-                hide_index=True,
-            )
-        else:
-            st.info("No drilldown data available.")
-
-    with analysis_tabs[3]:
-        if top_cust is not None:
-            st.dataframe(top_cust.head(20), use_container_width=True, hide_index=True)
-        else:
-            st.info("Customer-specific data not found in this segment.")
-
-    # 🔎 GLOBAL SEARCH (Matches Catwise Raw Data Search)
-    with st.expander("🔎 Deep Search & Raw Data Explorer"):
+    with detail_tabs[3]:
         search_query = st.text_input(
-            "Search for products, orders, or customers...",
+            "Search full source records",
             key=f"search_{src}_{tf}",
+            placeholder="Product, category, customer, order...",
         ).lower()
         if search_query:
-            # Search across all string columns
             mask = (
                 df.astype(str)
                 .apply(lambda x: x.str.contains(search_query, case=False, na=False))
                 .any(axis=1)
             )
             results = df[mask]
-            st.success(f"Found {len(results)} matches.")
+            st.caption(f"Showing {len(results):,} matching rows.")
             st.dataframe(results, use_container_width=True)
         else:
-            st.caption("Showing first 20 records. Use the search box above to filter.")
-            st.dataframe(df.head(20), use_container_width=True)
+            if show_full_raw:
+                st.caption("Showing the full dataset.")
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.caption("Showing the first 20 rows.")
+                st.dataframe(df.head(20), use_container_width=True)
+
+
+def enable_live_auto_refresh(interval_seconds=LIVE_STREAM_REFRESH_SECONDS):
+    st.caption(f"Auto-refresh is active every {interval_seconds} seconds.")
+    components.html(
+        f"""
+        <script>
+        window.setTimeout(function() {{
+            window.parent.location.reload();
+        }}, {interval_seconds * 1000});
+        </script>
+        """,
+        height=0,
+    )
 
 
 # --- TABS ---
 
 
-def render_live_tab():
+def _render_live_tab_legacy():
     from src.ui.components import render_status_strip, render_action_bar
     section_card(
-        "📡 Live Stream", "Real-time performance synchronized with current active records."
+        "📡 Live Stream", "Real-time performance synchronized with LastDaySales."
     )
+    enable_live_auto_refresh()
     
-    p_click, _ = render_action_bar("🔄 Force Manual Sync", "live_sync_btn")
+    p_click, _ = render_action_bar("Refresh Queue", "live_sync_btn")
     if p_click:
         from src.core.sync import clear_sync_cache
         clear_sync_cache()
-        st.toast("⚡ Syncing Live Records...", icon="🔄")
+        st.toast("Syncing live records...")
         st.rerun()
     try:
         from src.core.sync import load_shared_gsheet
-        df, src, upd = load_shared_gsheet("LastDaySales", force_refresh=False)
+        df, src, upd = load_shared_gsheet(LIVE_SALES_TAB_NAME, force_refresh=False)
         
         mc = find_columns(df)
         
         # --- AUTO-SYNC DATA PROCESSING ---
         if mc.get("date") in df.columns:
             df[mc["date"]] = parse_dates(df[mc["date"]])
+            latest_date = df[mc["date"]].max()
+            if pd.notna(latest_date):
+                target_date = latest_date.date()
+                df = df[df[mc["date"]].dt.date == target_date].copy()
+                st.info(f"📅 Showing Live Data for: **{target_date.strftime('%d %b %Y')}** (Most Recent Activity)")
         
         # Precomputed KPI Snapshot Check
         from src.core.paths import CACHE_DIR
@@ -383,7 +586,17 @@ def render_live_tab():
                  pass
 
         if df_processed is not None:
-            render_dashboard_output(df_processed, dr, sm, tp, tf, bk, src, upd, top_cust=tc)
+            render_dashboard_output(
+                df_processed,
+                dr,
+                sm,
+                tp,
+                tf,
+                bk,
+                src=src,
+                top_cust=tc,
+                show_full_raw=True,
+            )
     except Exception as e:
         # Try to show last known KPI if sync fails
         from src.core.paths import CACHE_DIR
@@ -394,12 +607,374 @@ def render_live_tab():
             st.warning(f"Live sync offline. Showing snapshot from {s.get('upd', 'Unknown')}")
             c1, c2, c3, c4 = st.columns(4)
             from src.ui.components import render_metric_hud
-            render_metric_hud("Items (Cached)", f"{s.get('items', 0):,}", "📦")
-            render_metric_hud("Orders (Cached)", f"{s.get('orders', 0):,}", "🛒")
-            render_metric_hud("Revenue (Cached)", f"TK {s.get('revenue', 0):,.0f}", "💰")
-            render_metric_hud("Avg Basket (Cached)", f"TK {s.get('avg_basket', 0):,.0f}", "🛍️")
+            render_metric_hud("Items (Cached)", f"{s.get('items', 0):,}")
+            render_metric_hud("Orders (Cached)", f"{s.get('orders', 0):,}")
+            render_metric_hud("Revenue (Cached)", f"TK {s.get('revenue', 0):,.0f}")
+            render_metric_hud("Avg Basket (Cached)", f"TK {s.get('avg_basket', 0):,.0f}")
         
         st.error(f"Live sync error: {e}")
+
+
+def _render_live_tab_transition():
+    from src.ui.components import render_action_bar
+    from src.core.paths import CACHE_DIR
+    from src.core.sync import clear_sync_cache, load_shared_gsheet
+    from src.core.gsheet_archive import (
+        has_archive_credentials,
+        is_archive_auto_enabled,
+        sync_live_sales_archive,
+    )
+
+    section_card(
+        "Live Stream",
+        f"Full {LIVE_SALES_TAB_NAME} tab for active processing and shipping operations.",
+    )
+    enable_live_auto_refresh()
+
+    p_click, archive_click = render_action_bar(
+        "Refresh Queue",
+        "live_sync_btn",
+        "Archive Ready Orders",
+        "live_archive_btn",
+    )
+    if p_click:
+        clear_sync_cache()
+        st.toast("Syncing live records...")
+        st.rerun()
+
+    force_refresh = False
+    archive_result = None
+    auto_archive_enabled = is_archive_auto_enabled()
+    archive_credentials_ready = has_archive_credentials()
+
+    if archive_click:
+        archive_result = sync_live_sales_archive()
+    elif auto_archive_enabled and archive_credentials_ready:
+        archive_result = sync_live_sales_archive()
+
+    if archive_result is not None:
+        if archive_result.ok and archive_result.deleted_rows:
+            clear_sync_cache()
+            force_refresh = True
+            st.success(
+                f"{archive_result.message} Control column: {archive_result.control_column}."
+            )
+        elif archive_result.ok:
+            st.info(archive_result.message)
+        else:
+            st.warning(archive_result.message)
+
+    with st.expander("Archive automation", expanded=False):
+        st.write(
+            f"Use {LIVE_SALES_TAB_NAME} as the live queue and move finished rows into 2026 automatically."
+        )
+        st.write(
+            f"Add one control column in {LIVE_SALES_TAB_NAME} named `Archive Status`, `Sync Status`, `Sync to 2026`, or `Archive to 2026`."
+        )
+        st.write(
+            "Mark rows with one of these values to archive them: `ready`, `done`, `completed`, `shipped`, `archive`, `synced`."
+        )
+        st.write(
+            f"Auto-archive enabled: `{auto_archive_enabled}`. Credentials ready: `{archive_credentials_ready}`."
+        )
+        st.write(
+            "Required secret/env for write access: `GSHEET_SPREADSHEET_ID` or `GSHEET_EDIT_URL`, plus `GSHEET_SERVICE_ACCOUNT_JSON` or `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_PRIVATE_KEY`."
+        )
+
+    try:
+        df, src, upd = load_shared_gsheet(LIVE_SALES_TAB_NAME, force_refresh=force_refresh)
+        mc = find_columns(df)
+        kpi_cache_file = CACHE_DIR / "live_kpi_snapshot.json"
+
+        dr, sm, tp, tf, bk, df_processed, tc = process_data(df, mc)
+        tf = f"{LIVE_SALES_TAB_NAME} Live Queue"
+
+        if sm is not None:
+            try:
+                snapshot = {
+                    "upd": upd,
+                    "items": int(sm["Total Qty"].sum()),
+                    "revenue": float(sm["Total Amount"].sum()),
+                    "orders": int(bk["total_orders"]),
+                    "avg_basket": float(bk["avg_basket_value"]),
+                }
+                with open(kpi_cache_file, "w") as f:
+                    json.dump(snapshot, f)
+            except Exception:
+                pass
+
+        if df_processed is not None:
+            st.info(f"Live dashboard is showing the full {LIVE_SALES_TAB_NAME} tab.")
+            render_dashboard_output(
+                df_processed,
+                dr,
+                sm,
+                tp,
+                tf,
+                bk,
+                src=src,
+                top_cust=tc,
+                show_full_raw=True,
+            )
+    except Exception as e:
+        kpi_cache_file = CACHE_DIR / "live_kpi_snapshot.json"
+        if os.path.exists(kpi_cache_file):
+            with open(kpi_cache_file, "r") as f:
+                s = json.load(f)
+            st.warning(
+                f"Live sync offline. Showing snapshot from {s.get('upd', 'Unknown')}"
+            )
+            from src.ui.components import render_metric_hud
+
+            c1, c2, c3, c4 = st.columns(4)
+            render_metric_hud("Items (Cached)", f"{s.get('items', 0):,}")
+            render_metric_hud("Orders (Cached)", f"{s.get('orders', 0):,}")
+            render_metric_hud("Revenue (Cached)", f"TK {s.get('revenue', 0):,.0f}")
+            render_metric_hud("Avg Basket (Cached)", f"TK {s.get('avg_basket', 0):,.0f}")
+
+        st.error(f"Live sync error: {e}")
+
+
+def render_live_tab():
+    from src.core.gsheet_archive import has_archive_credentials, is_archive_auto_enabled
+    from src.ui.components import render_action_bar, render_plotly_chart, render_status_strip
+
+    enable_live_auto_refresh()
+    section_card(
+        "Live Queue",
+        f"Operational queue built from the full {LIVE_SALES_TAB_NAME} tab. Historical analysis now uses the core workbook plus fresh 2026 rows from Google Sheets.",
+    )
+
+    manual_sync, manual_archive = render_action_bar(
+        "Refresh Queue",
+        "live_sync_btn",
+        "Archive Ready Orders",
+        "live_archive_btn",
+    )
+
+    force_refresh = False
+    if manual_sync:
+        clear_sync_cache()
+        force_refresh = True
+
+    archive_result = run_archive_if_requested(
+        manual_trigger=manual_archive, auto_trigger=not manual_archive
+    )
+    if archive_result is not None:
+        if archive_result.ok and archive_result.deleted_rows:
+            clear_sync_cache()
+            force_refresh = True
+            st.success(
+                f"{archive_result.message} Control column: {archive_result.control_column}."
+            )
+        elif archive_result.ok:
+            st.info(archive_result.message)
+        else:
+            st.warning(archive_result.message)
+
+    try:
+        package = load_live_queue(force_refresh=force_refresh)
+        analytics = package.analytics
+        metrics = package.queue_metrics
+
+        render_ops_hero(
+            f"{LIVE_SALES_TAB_NAME} Live Queue",
+            "Core metrics focus on active processing. Analytics engine: ACTIVE.",
+            [
+                f"Source {package.source_name}",
+                f"Refresh {package.last_refresh or 'N/A'}",
+                f"Auto archive {'ON' if is_archive_auto_enabled() else 'OFF'}",
+            ],
+        )
+        render_status_strip(
+            source=package.source_name,
+            rows=len(package.normalized_df),
+            last_refresh=package.last_refresh,
+            status="Active Queue",
+        )
+        
+        # NEW: Automated Insights for Live Queue
+        render_automated_insights(
+            package.normalized_df, 
+            analytics["summary"], 
+            analytics["basket"]
+        )
+
+        summary = analytics["summary"].copy()
+        if not summary.empty:
+            summary["Volume Share (%)"] = (
+                summary["Total Qty"] / max(summary["Total Qty"].sum(), 1) * 100
+            ).round(2)
+
+        top_row = st.columns(4)
+        with top_row[0]:
+            render_ops_kpi(
+                "Items To Be Sold",
+                f"{metrics['units']:,}",
+                f"{metrics['line_items']:,} sellable lines currently in queue",
+            )
+        with top_row[1]:
+            render_ops_kpi(
+                "Total Orders",
+                f"{metrics['unique_orders']:,}",
+                f"{metrics['ready_to_archive']:,} orders already marked ready",
+            )
+        with top_row[2]:
+            render_ops_kpi(
+                "Revenue",
+                f"TK {metrics['queue_value']:,.0f}",
+                "Current queue value based on line totals",
+            )
+        with top_row[3]:
+            render_ops_kpi(
+                "Avg Basket Value",
+                f"TK {analytics['basket']['avg_basket_value']:,.0f}",
+                f"Avg {analytics['basket']['avg_basket_qty']:.1f} items per basket",
+            )
+
+        chart_a, chart_b = st.columns(2)
+        with chart_a:
+            if not summary.empty:
+                fig_pie = px.pie(
+                    summary.sort_values("Total Amount", ascending=False),
+                    values="Total Amount",
+                    names="Category",
+                    hole=0.55,
+                    title="Revenue Share by Category",
+                    color_discrete_sequence=px.colors.sequential.Blues_r,
+                )
+                render_plotly_chart(fig_pie, key="live_revenue_share")
+            else:
+                st.info("Revenue-share chart is not available for the current queue.")
+        with chart_b:
+            if not summary.empty:
+                fig_volume = px.bar(
+                    summary.sort_values("Total Qty", ascending=True),
+                    x="Total Qty",
+                    y="Category",
+                    orientation="h",
+                    title="Volume by Category",
+                    color="Total Qty",
+                    color_continuous_scale="Blues",
+                )
+                render_plotly_chart(fig_volume, key="live_category_volume")
+            else:
+                st.info("Category-volume chart is not available for the current queue.")
+
+        side_a, side_b = st.columns([1.3, 1])
+        with side_a:
+            st.markdown("#### Product View")
+            st.dataframe(
+                analytics["top_products"].head(25),
+                use_container_width=True,
+                hide_index=True,
+            )
+        with side_b:
+            render_ops_list(
+                [
+                    ("Avg Basket Qty", f"{analytics['basket']['avg_basket_qty']:.1f}"),
+                    ("Avg Basket TK", f"TK {analytics['basket']['avg_basket_value']:,.0f}"),
+                    ("Total Item", f"{metrics['units']:,}"),
+                    ("Total Unique Order", f"{metrics['unique_orders']:,}"),
+                    ("Total Unique Customer", f"{compute_unique_customer_count(package.normalized_df):,}"),
+                ]
+            )
+
+        insight_tabs = st.tabs(
+            ["Queue Summary", "Products", "Customers", "Raw Queue", "Archive Automation"]
+        )
+
+        with insight_tabs[0]:
+            if not summary.empty:
+                st.dataframe(
+                    summary.sort_values("Total Amount", ascending=False),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.info("No summary rows are available.")
+
+        with insight_tabs[1]:
+            st.dataframe(
+                analytics["top_products"].head(50),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        with insight_tabs[2]:
+            top_customers = analytics["top_customers"]
+            if top_customers is not None and not top_customers.empty:
+                st.dataframe(
+                    top_customers.head(25), use_container_width=True, hide_index=True
+                )
+            else:
+                st.info("Customer detail is not available in the current queue.")
+
+        with insight_tabs[3]:
+            display_queue = package.normalized_df.copy()
+            selected_columns = [
+                "order_id",
+                "order_date",
+                "customer_name",
+                "phone",
+                "state",
+                "sku",
+                "item_name",
+                "qty",
+                "unit_price",
+                "order_total",
+                "archive_status",
+                "customer_note",
+            ]
+            search_query = st.text_input(
+                "Search live queue",
+                key="live_queue_search",
+                placeholder="Order number, phone, product, customer...",
+            ).strip()
+            if search_query:
+                mask = (
+                    display_queue[selected_columns]
+                    .astype(str)
+                    .apply(lambda col: col.str.contains(search_query, case=False, na=False))
+                    .any(axis=1)
+                )
+                display_queue = display_queue[mask]
+
+            st.caption(f"Showing {len(display_queue):,} rows from {LIVE_SALES_TAB_NAME}.")
+            st.dataframe(
+                display_queue[selected_columns],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        with insight_tabs[4]:
+            st.markdown(
+                """
+                Add one control column in `LatestSales`:
+                `Archive Status`, `Sync Status`, `Sync to 2026`, or `Archive to 2026`.
+                """
+            )
+            st.markdown(
+                """
+                Mark rows with one of these values to move them into `2026`:
+                `ready`, `done`, `completed`, `shipped`, `archive`, `synced`.
+                """
+            )
+            st.markdown(
+                """
+                Required write-access settings:
+                `GSHEET_SPREADSHEET_ID` or `GSHEET_EDIT_URL`,
+                plus `GSHEET_SERVICE_ACCOUNT_JSON`
+                or `GOOGLE_SERVICE_ACCOUNT_EMAIL` + `GOOGLE_PRIVATE_KEY`.
+                """
+            )
+            st.caption(
+                f"Auto archive enabled: {is_archive_auto_enabled()} | Credentials ready: {has_archive_credentials()}"
+            )
+    except Exception as e:
+        st.error(f"Live queue failed to load: {e}")
+
+    render_reset_confirm("Live Queue", "sales_live", clear_sync_cache)
 
 
 def parse_date_from_tab_name(name):
@@ -418,524 +993,173 @@ def parse_date_from_tab_name(name):
 
 
 def get_all_statements_master(full_history: bool = False, force_refresh: bool = False):
-    """
-    Intelligent Incremental Builder for Statement Master.
-    """
-    from src.core.paths import GSHEETS_CACHE_DIR
-    cache_file = GSHEETS_CACHE_DIR / (
-        "master_full.parquet" if full_history else "master_recent.parquet"
-    )
-
-    # 1. Fast Path: Local-First (Bypass cloud if cache is fresh < 60 mins)
-    if cache_file.exists() and not force_refresh and not full_history:
-        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
-        age_mins = (datetime.now() - mtime).total_seconds() / 60
-        if age_mins < 60:
-             try:
-                 df = pd.read_parquet(cache_file)
-                 if not df.empty:
-                      return df, f"Local Hub (Cached {int(age_mins)}m ago)"
-             except Exception:
-                 pass
-
-    # 2. Cloud Revalidation (Slower Path)
-    from src.core.sync import load_sheet_with_cache, is_volatile, load_published_sheet_tabs
-
-    # 1. Initialize empty or existing master foundation
-    master_df = pd.DataFrame()
-    if cache_file.exists():
-        try:
-            master_df = pd.read_parquet(cache_file)
-        except Exception:
-            master_df = pd.DataFrame()
-
-    url = get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
-    try:
-        tabs = load_published_sheet_tabs(url, force_refresh=force_refresh)
-    except Exception as e:
-        if not master_df.empty:
-            return master_df, f"Offline Mode: Using Local Database ({len(master_df):,} rows)"
-        return None, f"Failed to load tabs: {e}"
-
-    # 2. Filter and sort tabs (same logic as before)
-    relevant_tabs = []
-    for tab in tabs:
-        tname = tab["name"].lower()
-        if (
-            tname in TOTAL_SALES_EXCLUDED_TABS
-            or "sample" in tname
-            or "template" in tname
-        ):
-            continue
-        tab["parsed_date"] = parse_date_from_tab_name(tab["name"])
-        relevant_tabs.append(tab)
-
-    relevant_tabs.sort(key=lambda x: x["parsed_date"], reverse=True)
-    if not full_history and len(relevant_tabs) > 3:
-        relevant_tabs = relevant_tabs[:3]
-
-    # 3. Incremental Processing Loop
-    all_dfs = []
-    failures = []
-    skipped_count = 0
-    synced_count = 0
-    
-    progress_text = f"Updating {'Full' if full_history else 'Recent'} Database..."
-    progress_bar = st.progress(0, text=progress_text)
-
-    for i, tab in enumerate(relevant_tabs):
-        tab_name = tab["name"]
-        tab_gid = tab["gid"]
-        
-        # DECISION: Should we sync this tab?
-        # A) It's volatile (current year/live)
-        # B) It's missing from local master
-        # C) User forced a refresh
-        is_missing = master_df.empty or "_src_tab" not in master_df.columns or tab_name not in master_df["_src_tab"].unique()
-        needs_sync = force_refresh or is_volatile(tab_name) or is_missing
-
-        if not needs_sync:
-            # Re-use existing local data for this tab
-            local_tab_data = master_df[master_df["_src_tab"] == tab_name]
-            if not local_tab_data.empty:
-                all_dfs.append(local_tab_data)
-                skipped_count += 1
-                continue
-
-        # Perform Network Sync
-        try:
-            progress_bar.progress((i + 1) / len(relevant_tabs), text=f"Syncing {tab_name}...")
-            df, _ = load_sheet_with_cache(url, tab_gid, tab_name, force_refresh=force_refresh)
-            
-            if not df.empty:
-                m = find_columns(df)
-                df = df.copy()
-                df["_src_tab"] = tab_name
-
-                # Schema mapping (same robust logic as before)
-                schema_cols = {
-                    "_p_name": ("name", "Unknown Product"),
-                    "_p_cust_name": ("customer_name", None),
-                    "_p_cost": ("cost", 0),
-                    "_p_qty": ("qty", 0),
-                    "_p_date": ("date", pd.NaT),
-                    "_p_order": ("order_id", None),
-                    "_p_phone": ("phone", None),
-                    "_p_email": ("email", None),
-                }
-
-                for internal, (find_key, default) in schema_cols.items():
-                    if find_key in m:
-                        if internal == "_p_cost" or internal == "_p_qty":
-                             df[internal] = pd.to_numeric(df[m[find_key]], errors="coerce").fillna(0)
-                        elif internal == "_p_date":
-                             df[internal] = parse_dates(df[m[find_key]])
-                        else:
-                             df[internal] = df[m[find_key]].astype(str)
-                    else:
-                        df[internal] = default
-                
-                all_dfs.append(df)
-                synced_count += 1
-        except Exception as e:
-            failures.append(f"{tab_name} ({e})")
-            # Fallback to local data if sync failed
-            local_tab_data = master_df[master_df["_src_tab"] == tab_name] if not master_df.empty else pd.DataFrame()
-            if not local_tab_data.empty:
-                all_dfs.append(local_tab_data)
-
-    progress_bar.empty()
-
-    if not all_dfs:
-        return None, "Database is empty."
-
-    # 4. Final Reconstruction
-    final_master = pd.concat(all_dfs, ignore_index=True)
-    
-    # Save optimized master
-    try:
-        final_master.to_parquet(cache_file, index=False)
-    except Exception:
-        pass
-
-    msg = f"Database Ready: {len(final_master):,} rows ({synced_count} updated, {skipped_count} local)"
-    return final_master, msg
+    """Load master sales data from the core workbook plus new 2026 rows from GSheet."""
+    return load_master_sales_dataset(force_refresh=force_refresh)
 
 
 def render_custom_period_tab():
-    section_card("📂 Sales Hub", "Interactive analysis with incremental multi-year syncing.")
-    
     from src.ui.components import render_date_range_selector
-    
-    # 1. Period Selector (Always Visible)
+
     cur_start, cur_end = render_date_range_selector("sales_hub")
-    
-    # 2. Sync Configuration
-    full_requested = st.toggle("Enable Deep-History (2022-2025)", value=st.session_state.get("full_hist_toggle", False), key="full_hist_toggle")
-    
-    if st.button("🔄 Sync Missing Data", use_container_width=True):
-        get_all_statements_master(full_history=full_requested, force_refresh=True)
-        st.toast("Syncing with cloud...", icon="📡")
+    selected_period = format_period_label(cur_start, cur_end)
+
+    if st.button("Refresh Historical Core", use_container_width=True):
+        get_all_statements_master(force_refresh=True)
+        st.toast("Refreshing workbook core and 2026 delta...")
         st.rerun()
 
-    st.divider()
-
-    # 3. Load & Filter
-    master, msg = get_all_statements_master(full_history=full_requested)
+    master, msg = get_all_statements_master()
     if master is None:
         st.error(msg)
         return
-    
-    st.caption(f"🛡️ Local Database: {msg}")
 
     if "_p_date" in master.columns:
         filtered = master[
             (master["_p_date"].dt.date >= cur_start) & (master["_p_date"].dt.date <= cur_end)
         ].copy()
-        
+
         if filtered.empty:
-            st.warning(f"No records locally found for {cur_start} to {cur_end}. Try 'Sync Missing Data' above.")
+            st.warning(f"No records found for {cur_start} to {cur_end}.")
             return
 
         mc = {
-            "name": "_p_name", "cost": "_p_cost", "qty": "_p_qty",
-            "date": "_p_date", "order_id": "_p_order",
-            "phone": "_p_phone", "email": "_p_email",
+            "name": "_p_name",
+            "cost": "_p_cost",
+            "qty": "_p_qty",
+            "date": "_p_date",
+            "order_id": "_p_order",
+            "phone": "_p_phone",
+            "email": "_p_email",
         }
+        # PREVIOUS PERIOD ANALYSIS
+        diff = (cur_end - cur_start).days + 1
+        prev_end = cur_start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=diff - 1)
+        
+        prev_metrics = None
+        prev_df = master[
+            (master["_p_date"].dt.date >= prev_start) & (master["_p_date"].dt.date <= prev_end)
+        ].copy()
+        
+        if not prev_df.empty:
+            p_dr, p_sm, p_tp, p_tf, p_bk, _, p_tc = process_data(prev_df, mc)
+            if p_sm is not None:
+                prev_metrics = {"sm": p_sm, "bk": p_bk, "tc": p_tc}
+
         dr, sm, tp, tf, bk, filtered_df, tc = process_data(filtered, mc)
         if filtered_df is not None:
-            render_dashboard_output(filtered_df, dr, sm, tp, tf, bk, "MasterDB", "Delta Sync", top_cust=tc)
+            render_dashboard_output(
+                filtered_df,
+                dr,
+                sm,
+                tp,
+                tf,
+                bk,
+                "Workbook Core",
+                "2026 Delta Sync",
+                top_cust=tc,
+                display_period=selected_period,
+                prev_metrics=prev_metrics,
+            )
     else:
         st.error("Time-series column missing in current dataset.")
 
 
 def render_customer_pulse_tab():
-    section_card("👥 Customer Pulse", "LTV, retention, and scaling trends across history.")
+    section_card("👥 Customer Pulse", "Cross-statement unique customer insights and loyalty metrics.")
+    if st.button("🔄 Refresh Pulse Data", use_container_width=True, key="refresh_pulse_btn"): get_all_statements_master.clear(); st.rerun()
     
-    from src.ui.components import render_date_range_selector
-    cur_start, cur_end = render_date_range_selector("cust_pulse")
+    # Check if we need full history for Pulse too
+    full_hist = st.toggle("Enable Full History Analytics", value=False, key="pulse_hist_toggle")
     
-    full_requested = st.toggle("Access Deep History (2022-2025)", value=False, key="pulse_full_toggle")
+    master, msg = get_all_statements_master(full_history=full_hist)
+    if master is None: st.info("Pulse data not yet ready."); return
     
-    if st.button("🔄 Sync Customer Data", use_container_width=True, key="refresh_pulse_btn"):
-        get_all_statements_master(full_history=full_requested, force_refresh=True)
-        st.toast("⚡ Updating Pulse Analytics...", icon="🔄")
-        st.rerun()
+    # Default to last 30 days for Pulse overview
+    if '_p_date' in master.columns:
+        valid_dates = master[master['_p_date'].notna()]
+        if not valid_dates.empty:
+            min_d = valid_dates['_p_date'].min().date()
+            abs_min = date(2022, 1, 1)
+            f1, f2 = st.columns(2)
+            default_pulse_start = max(min_d, date.today() - timedelta(days=180))
+            p_start = f1.date_input("Pulse From", default_pulse_start, min_value=abs_min, max_value=date.today(), key="pulse_start")
+            p_end = f2.date_input("Pulse To", date.today(), min_value=abs_min, max_value=date.today(), key="pulse_end")
+            db = master[(master['_p_date'].dt.date >= p_start) & (master['_p_date'].dt.date <= p_end)].copy()
+        else:
+            db = master.copy()
+    else:
+        db = master.copy()
 
-    master, msg = get_all_statements_master(full_history=full_requested)
-    if master is None or master.empty:
-        st.error(f"Failed to load customer foundation: {msg}")
-        return
-        
-    st.caption(f"🛡️ Database: {msg}")
+    if db.empty: st.warning("No data found for selected pulse range."); return
     
-    # Process UIDs across the entire master to find TRUE loyalists
-    master["UID"] = (
-        master.get("_p_phone", pd.Series(dtype=str))
-        .fillna(master.get("_p_email", pd.Series(dtype=str)))
-        .astype(str).str.strip().str.lower()
-    )
+    # Identify unique customers across the ENTIRE current master (Global View)
+    master['UID'] = master.get('_p_phone', pd.Series(dtype=str)).fillna(master.get('_p_email', pd.Series(dtype=str))).astype(str).str.strip().str.lower()
+    global_unique = master[(master['UID'] != "") & (master['UID'] != "nan") & (master['UID'].notna())]['UID'].nunique()
     
-    # Filter based on visible date range
-    db = master[
-        (master["_p_date"].dt.date >= cur_start) & (master["_p_date"].dt.date <= cur_end)
-    ].copy()
+    # Process Filtered View for New/Growth analysis
+    db['UID'] = db.get('_p_phone', pd.Series(dtype=str)).fillna(db.get('_p_email', pd.Series(dtype=str))).astype(str).str.strip().str.lower()
+    db = db[(db['UID'] != "") & (db['UID'] != "nan") & (db['UID'].notna())]
     
-    if db.empty:
-        st.info(f"No customer activity found between {cur_start} and {cur_end}. Try expanding the date range.")
-        return
-
-    try:
-        render_customer_pulse_core(db)
-    except Exception as e:
-        from src.core.errors import log_error
-        log_error(e, context="Customer Pulse Tab")
-        st.error(f"Pulse analysis failed: {e}")
-        st.info("💡 Try clicking 'Global Recovery -> Clear Cache' in the sidebar.")
-
-
-def render_customer_pulse_core(db):
-    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
-
-    if db.empty:
-        st.warning("No data found for selected pulse range.")
-        return
-
-    # Advanced Metrics
-    db["Total_Amount"] = db["_p_cost"] * db["_p_qty"]
-    total_revenue = db["Total_Amount"].sum()
-
-    unique_customers = db["UID"].nunique()
-    # Group by UID and take the last name seen as the most accurate
-    freq = (
-        db.groupby("UID")
-        .agg(
-            {
-                "_p_cust_name": "last",
-                "_p_order": "nunique",
-                "Total_Amount": "sum",
-                "_p_date": "max",
-            }
-        )
-        .reset_index()
-    )
-    freq.columns = ["UID", "Name", "Orders", "LifetimeValue", "LastActive"]
-    # Fallback for display - handle both None and placeholder strings
-    freq["Name"] = (
-        freq["Name"].replace(["N/A", "None", None, ""], pd.NA).fillna(freq["UID"])
-    )
-
-    returning_count = len(freq[freq["Orders"] > 1])
-    retention_rate = (
-        (returning_count / unique_customers * 100) if unique_customers > 0 else 0
-    )
-    avg_clv = total_revenue / unique_customers if unique_customers > 0 else 0
-
-    # STORYTELLING NARRATIVE
-    is_dark = st.session_state.get("app_theme", "Dark Mode") == "Dark Mode"
-    accent_color = "#3b82f6" if is_dark else "#1d4ed8"
-    text_color = "#f8fafc" if is_dark else "#0f172a"
-
-    # Advanced Calculations
-    avg_orders = db.groupby("UID")["_p_order"].nunique().mean()
-    last_orders = db.groupby("UID")["_p_date"].max()
-    avg_recency = (pd.Timestamp.now() - last_orders).dt.days.mean()
-
-    story = f"""
-    <div style="background: rgba(59, 130, 246, 0.08); border-left: 5px solid {accent_color}; padding: 1.5rem; border-radius: 4px 20px 20px 4px; margin-bottom: 2.5rem; font-family: 'Outfit';">
-        <div style="color: {accent_color}; font-weight: 800; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.15em; margin-bottom: 0.75rem;">🛰️ CUSTOMER BASE INTELLIGENCE</div>
-        <div style="font-size: 1.15rem; color: {text_color}; line-height: 1.6; font-weight: 400;">
-            Monitoring <b>{unique_customers:,} unique customers</b>. 
-            On average, active users interact every <b>{int(avg_recency or 0)} days</b> with a loyalty frequency of <b>{avg_orders:.1f} orders</b> per customer. 
-            The ecosystem demonstrates a <b>{retention_rate:.1f}% retention rate</b>, generating an average lifetime value of <b>TK {avg_clv:,.0f}</b>.
-        </div>
-    </div>
-    """
-    st.markdown(story, unsafe_allow_html=True)
-
-    # Metrics HUD
-    from src.ui.components import render_metric_hud
-
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        render_metric_hud("Unique Pulse", f"{unique_customers:,}", "👥")
-    with m2:
-        render_metric_hud("Order Frequency", f"{avg_orders:.1f}x", "🛒")
-    with m3:
-        render_metric_hud("Avg Recency", f"{int(avg_recency or 0)} Days", "🕒")
-    with m4:
-        render_metric_hud("Retention Rate", f"{retention_rate:.1f}%", "🔄")
-
-    # Secondary HUD
-    c1, c2 = st.columns(2)
-    with c1:
-        render_metric_hud("Avg CLV", f"TK {avg_clv:,.0f}", "💎")
-    with c2:
-        render_metric_hud("Loyalists", f"{returning_count:,}", "🏆")
-
-    # Visual Insights
-    theme_template = "plotly_dark" if is_dark else "plotly_white"
-    chart_font_color = "#f8fafc" if is_dark else "#0f172a"
-
+    cust = db.sort_values('_p_date').groupby('UID')['_p_date'].min().reset_index()
+    cust.columns = ['UID', 'AcqDate']
+    
+    # Calculate Acquisition Metrics
+    today = date.today()
+    this_m = date(today.year, today.month, 1)
+    last_m_end = this_m - timedelta(days=1)
+    last_m_start = date(last_m_end.year, last_m_end.month, 1)
+    
+    new_lm = len(cust[(cust['AcqDate'].dt.date >= last_m_start) & (cust['AcqDate'].dt.date <= last_m_end)])
+    new_tm = len(cust[cust['AcqDate'].dt.date >= this_m])
+    
+    m0, m1, m2, m3 = st.columns(4)
+    m0.metric("Total Customers (Current Data)", f"{global_unique:,}")
+    m1.metric("Range Unique Customers", f"{len(cust):,}")
+    m2.metric("New (Last Month)", f"{new_lm:,}")
+    m3.metric("New (This Month)", f"{new_tm:,}")
+    
+    # Visuals
+    trend = cust.dropna(subset=['AcqDate']).copy()
+    trend['Month'] = trend['AcqDate'].dt.strftime('%Y-%m')
+    trend_grp = trend.groupby('Month').size().reset_index(name='New')
+    trend_grp['Total (Cumulative)'] = trend_grp['New'].cumsum()
+    
     col1, col2 = st.columns(2)
     with col1:
-        cust_acq = (
-            db.sort_values("_p_date").groupby("UID")["_p_date"].min().reset_index()
-        )
-        cust_acq.columns = ["UID", "AcqDate"]
-        cust_acq["Month"] = cust_acq["AcqDate"].dt.strftime("%Y-%m")
-        trend_grp = cust_acq.groupby("Month").size().reset_index(name="New")
-        trend_grp["Cumulative"] = trend_grp["New"].cumsum()
-
-        fig_growth = px.line(
-            trend_grp,
-            x="Month",
-            y=["Cumulative", "New"],
-            title="Customer Scaling Factor",
-            color_discrete_sequence=(
-                ["#3b82f6", "#10b981"] if is_dark else ["#1d4ed8", "#059669"]
-            ),
-        )
-        fig_growth.update_traces(mode="lines+markers")
-        from src.ui.components import render_plotly_chart
-        render_plotly_chart(fig_growth, key="pulse_scaling_line")
-
+        # Dual-series graph: Line for monthly new and total growth
+        fig_trend = px.line(
+            trend_grp, 
+            x='Month', 
+            y=['Total (Cumulative)', 'New'], 
+            title="Customer Growth & Acquisition", 
+            template="plotly_dark", 
+            color_discrete_sequence=['#3b82f6', '#10b981']
+        ).update_layout(hovermode="x unified")
+        # Add markers for better clarity on data points
+        fig_trend.update_traces(mode='lines+markers')
+        st.plotly_chart(fig_trend, use_container_width=True)
+    
     with col2:
-        retention_df = pd.DataFrame(
-            {
-                "Segment": ["Returning Loyals", "One-Time Shoppers"],
-                "Count": [returning_count, unique_customers - returning_count],
-            }
-        )
-        fig_ret = px.pie(
-            retention_df,
-            values="Count",
-            names="Segment",
-            title="Retention Dynamics",
-            hole=0.6,
-            color_discrete_sequence=(
-                ["#10b981", "#334155"] if is_dark else ["#059669", "#cbd5e1"]
-            ),
-        )
-        from src.ui.components import render_plotly_chart
-        render_plotly_chart(fig_ret, key="pulse_ret_pie")
+        freq = db.groupby('UID').agg({'_p_order': 'nunique', '_p_cost': 'sum'}).reset_index()
+        freq.columns = ['UID', 'Orders', 'Revenue']
+        returning = len(freq[freq['Orders'] > 1])
+        one_time = len(freq[freq['Orders'] == 1])
+        retention_df = pd.DataFrame({'Type': ['Returning', 'One-time'], 'Count': [returning, one_time]})
+        st.plotly_chart(px.pie(retention_df, values='Count', names='Type', title="Retention Snapshot", hole=0.5, color_discrete_sequence=['#10b981', '#334155']), use_container_width=True)
 
-    # COHORT ANALYSIS
-    with st.expander("📈 Monthly Acquisition Cohorts"):
-        st.markdown("<div style='margin-bottom:1.5rem;'>", unsafe_allow_html=True)
-        st.markdown("#### Retention Heatmap")
-        try:
-            # We need to know first purchase month for each UID
-            cohort_data = db.copy()
-            cohort_data['Month'] = cohort_data['_p_date'].dt.to_period('M')
-            first_purchase = cohort_data.groupby('UID')['_p_date'].min().dt.to_period('M').reset_index()
-            first_purchase.columns = ['UID', 'FirstMonth']
-            
-            cohort_merged = pd.merge(cohort_data, first_purchase, on='UID')
-            cohort_pivot = cohort_merged.groupby(['FirstMonth', 'Month']).agg({'UID': 'nunique'}).reset_index()
-            cohort_pivot['Period'] = (cohort_pivot['Month'] - cohort_pivot['FirstMonth']).apply(lambda x: x.n)
-            
-            final_cohort = cohort_pivot.pivot(index='FirstMonth', columns='Period', values='UID')
-            # Convert to retention percentage
-            cohort_size = final_cohort.iloc[:, 0]
-            retention = final_cohort.divide(cohort_size, axis=0) * 100
-            
-            st.markdown("#### Retention % by Acquisition Month")
-            st.dataframe(retention.style.format("{:.1f}%").background_gradient(cmap='Greens', axis=None), use_container_width=True)
-            st.caption("Month 0 = Acquisition Month. Month 1+ = Returned in subsequent months.")
-        except Exception as e:
-            st.info(f"Cohort data requires more history to render correctly. ({e})")
-
-    # VIP LEADERBOARD
-    st.markdown("### 🏆 Platinum Tier: Top 10 Spenders")
-    vip = freq.sort_values("LifetimeValue", ascending=False).head(10).copy()
-    vip["Engagement Index"] = vip["Orders"].apply(
-        lambda x: "🔥 High" if x > 3 else "⚡ Mid"
-    )
-    st.table(
-        vip[
-            ["Name", "UID", "Orders", "LifetimeValue", "Engagement Index"]
-        ].style.format({"LifetimeValue": "TK {:,.0f}"})
-    )
-
-    with st.expander("🔍 Deep Dive: Demographic & Risk Analysis"):
-        st.markdown("<div style='margin-bottom:1.5rem;'>", unsafe_allow_html=True)
-        st.caption("Risk Analysis: Customers not active in 90+ days")
-        three_months_ago = datetime.now() - timedelta(days=90)
-        risk_count = len(freq[freq["LastActive"] < three_months_ago])
-        st.warning(
-            f"⚠️ At-Risk Customers (Inactive > 90 days): **{risk_count:,}** ({risk_count/unique_customers*100:.1f}%)"
-        )
-
-        if "_src_tab" in db.columns:
-            source_grp = db.groupby("_src_tab").size().reset_index(name="Volume")
-            fig_src = px.bar(
-                source_grp,
-                x="Volume",
-                y="_src_tab",
-                orientation="h",
-                title="Loyalty by Source Channel",
-            )
-            from src.ui.components import render_plotly_chart
-            render_plotly_chart(fig_src, key="pulse_source_bar")
-
-
-def render_cache_health_panel():
-    """System tool to inspect the GSheet cache status."""
-    from src.core.sync import load_manifest
-    from src.core.paths import GSHEETS_CACHE_DIR, GSHEETS_RAW_DIR, GSHEETS_NORM_DIR
-    import os
-
-    st.markdown("### 🧪 GSheet Cache Health")
-    manifest = load_manifest()
-
-    if not manifest:
-        st.info("Cache is empty. Start a sync to populate.")
-        return
-
-    # Summary Metrics
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Manifest Entries", len(manifest))
+    # NEW FEATURES: VIP Leaderboard
+    st.markdown("### 🏆 VIP Leaderboard (Top Spenders)")
+    vip = freq.sort_values('Revenue', ascending=False).head(10).copy()
+    # Mask UID for privacy if needed, but here we show it for internal use
+    st.table(vip.style.format({'Revenue': 'TK {:,.0f}'}))
     
-    raw_size = sum(f.stat().st_size for f in GSHEETS_RAW_DIR.glob('*.csv')) / (1024 * 1024)
-    norm_size = sum(f.stat().st_size for f in GSHEETS_NORM_DIR.glob('*.parquet')) / (1024 * 1024)
-    
-    c2.metric("Raw Storage", f"{raw_size:.2f} MB")
-    c3.metric("Norm Storage", f"{norm_size:.2f} MB")
-
-    st.markdown("#### 📑 Cached Tabs")
-    cache_data = []
-    for k, v in manifest.items():
-        if k.startswith("tabs_"):
-            continue
+    with st.expander("🔍 Customer Geography & Channel Hint"):
+        if '_p_phone' in db.columns:
+            total_with_phone = len(db[db['_p_phone'].str.startswith('01', na=False)])
+            st.info(f"Verified mobile contacts in database: {total_with_phone:,}")
         
-        age = "N/A"
-        if "fetched_at" in v:
-            dt = datetime.fromisoformat(v["fetched_at"])
-            diff = datetime.now(timezone.utc) - dt
-            age = f"{int(diff.total_seconds() // 60)}m ago"
-        
-        cache_data.append({
-            "Tab": v.get("tab_name", "Unknown"),
-            "GID": v.get("gid"),
-            "Last Modified": v.get("last_modified", "Unknown"),
-            "Rows": v.get("row_count", 0),
-            "Age": age,
-            "Status": "✅ Fresh" if "m ago" in age and int(age.split('m')[0]) < 60 else "🟠 Stale"
-        })
-    
-    if cache_data:
-        st.table(pd.DataFrame(cache_data))
-    
-    if st.button("💾 Export Current Pivot to Local CSVs", use_container_width=True, help="Dumps all cached data into Excel-readable files in your 'incoming' folder"):
-        from src.core.paths import INCOMING_DIR
-        try:
-            m_df, msg = get_all_statements_master(full_history=False)
-            if m_df is not None and not m_df.empty:
-                csv_path = INCOMING_DIR / f"pivot_snapshot_{datetime.now().strftime('%Y%m%d')}.csv"
-                m_df.to_csv(csv_path, index=False)
-                st.success(f"Pivot snapshot secured: {csv_path.name}")
-            else:
-                st.warning("Database is currently empty. Sync first.")
-        except Exception as e:
-            st.error(f"Native export failed: {e}")
-
-    if st.button("🗑️ Wipe All Local Cache", type="secondary"):
-        from src.core.sync import clear_sync_cache
-        clear_sync_cache()
-        st.toast("Cache Purged")
-        st.rerun()
-
-
-def render_data_completeness_report():
-    """Detailed report on which months/tabs are loaded vs missing."""
-    st.markdown("### 📊 Data Completeness Report")
-    url = get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
-    try:
-        from src.core.sync import load_published_sheet_tabs, load_manifest
-        tabs = load_published_sheet_tabs(url)
-        manifest = load_manifest()
-        
-        report = []
-        for t in tabs:
-            if t["name"].lower() in TOTAL_SALES_EXCLUDED_TABS:
-                continue
-            
-            cache_key = f"gid_{t['gid']}"
-            cached = manifest.get(cache_key)
-            status = "❌ Missing"
-            details = "Not yet synced"
-            
-            if cached:
-                status = "✅ Synced"
-                details = f"{cached.get('row_count', 0)} rows, {cached.get('last_modified', 'No date')}"
-            
-            report.append({
-                "Sheet Tab": t["name"],
-                "Status": status,
-                "Details": details
-            })
-        
-        st.dataframe(pd.DataFrame(report), use_container_width=True, hide_index=True)
-    except Exception as e:
-        st.error(f"Failed to generate report: {e}")
+        # Acquisition source if multiple tabs
+        if '_src_tab' in db.columns:
+            source_grp = db.groupby('_src_tab').size().reset_index(name='Records')
+            st.plotly_chart(px.bar(source_grp, x='Records', y='_src_tab', orientation='h', title="Records by Statement Source"), use_container_width=True)

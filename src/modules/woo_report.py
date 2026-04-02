@@ -8,7 +8,17 @@ import requests
 import streamlit as st
 
 from src.core.errors import log_error
-from src.ui.components import section_card
+from src.ui.components import section_card, render_reset_confirm
+
+def _reset_wp_api_state():
+    from src.core.persistence import clear_state_keys
+    clear_state_keys([
+        WP_API_ORDERS_RESULT_KEY,
+        WP_API_ORDERS_META_KEY,
+        WP_API_ORDERS_DIAGNOSTICS_KEY,
+        WP_API_ORDERS_DISCOVERY_KEY,
+        WP_API_ORDERS_USER_ACCESS_KEY
+    ])
 
 DEFAULT_WP_ORDERS_SITE_URL = "https://deencommerce.com/"
 DEFAULT_WP_ORDERS_ENDPOINT_PATH = "/wp-json/wc/v3/orders"
@@ -1505,3 +1515,5 @@ def render_wp_api_orders_tab():
         return
 
     _render_wp_orders_dashboard(result_df, result_meta)
+
+    render_reset_confirm("WooCommerce Orders", "woo_api", _reset_wp_api_state)

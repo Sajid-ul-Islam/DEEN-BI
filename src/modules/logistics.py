@@ -10,7 +10,7 @@ from src.ui.components import (
     section_card,
     to_excel_bytes,
 )
-from src.core.sync import load_shared_gsheet, clear_sync_cache
+from src.core.sync import LIVE_SALES_TAB_NAME, load_shared_gsheet, clear_sync_cache
 from src.utils.data import find_columns
 
 REQUIRED_COLUMNS = ["Phone (Billing)"]
@@ -39,7 +39,7 @@ def render_pathao_tab(guided: bool = True):
         if st.button("📡 Sync from Live Stream", use_container_width=True):
             try:
                 clear_sync_cache()
-                df_sync, source_name, _ = load_shared_gsheet("LastDaySales")
+                df_sync, source_name, _ = load_shared_gsheet(LIVE_SALES_TAB_NAME)
                 st.session_state.pathao_preview_df = df_sync
                 st.session_state.pathao_uploaded_name = source_name
                 st.rerun()
@@ -105,6 +105,7 @@ def render_pathao_tab(guided: bool = True):
             to_excel_bytes(res_df),
             "Pathao_Final.xlsx",
             type="primary",
+            use_container_width=True,
         )
 
-    render_reset_confirm("pathao", _reset_pathao_state)
+    render_reset_confirm("Pathao Processor", "pathao", _reset_pathao_state)
