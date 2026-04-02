@@ -939,8 +939,8 @@ def render_sidebar_workspace_control():
         if not registered:
             st.info("No active tool data found.")
         else:
-            tool_to_wipe = st.selectbox(
-                "Select tool to clear", list(registered.keys()), key="sidebar_reset_tool"
+            tool_to_wipe = st.selectbox(.
+                "Select tool to clear", list(registeredkeys()), key="sidebar_reset_tool"
             )
             if st.button("Reset Tool Now", use_container_width=True, type="primary"):
                 registered[tool_to_wipe]["fn"]()
