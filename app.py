@@ -51,8 +51,7 @@ def run_app():
         render_sidebar_workspace_control,
         render_footer,
     )
-    from src.ui.bike_animation import render_bike_animation
-
+    from src.modules.retail_dashboard import render_retail_dashboard
     from src.modules.catwise import render_catwise_analytics_tab
 
     init_state()
@@ -62,7 +61,7 @@ def run_app():
         render_sidebar_shell()
 
         if "main_nav" not in st.session_state:
-            st.session_state.main_nav = "Live Queue"
+            st.session_state.main_nav = "Retail Dashboard"
 
         st.caption("Navigation")
         st.session_state.show_animation = st.toggle(
@@ -71,8 +70,8 @@ def run_app():
         )
 
         nav_options = [
+            "Retail Dashboard",
             "Live Queue",
-            "Sales Analysis",
             "Customer Pulse",
             "Catwise Analytics",
         ]
@@ -92,7 +91,7 @@ def run_app():
             save_state()
             st.toast("State saved")
         if st.button("Open This Month", use_container_width=True):
-            st.session_state.main_nav = "Sales Analysis"
+            st.session_state.main_nav = "Retail Dashboard"
             st.session_state.cust_start = date.today().replace(day=1)
             st.session_state.cust_end = date.today()
             st.rerun()
@@ -106,10 +105,10 @@ def run_app():
     if st.session_state.get("show_animation"):
         render_bike_animation()
 
-    if st.session_state.main_nav == "Live Queue":
+    if st.session_state.main_nav == "Retail Dashboard":
+        render_retail_dashboard()
+    elif st.session_state.main_nav == "Live Queue":
         render_live_tab()
-    elif st.session_state.main_nav == "Sales Analysis":
-        render_custom_period_tab()
     elif st.session_state.main_nav == "Customer Pulse":
         render_customer_pulse_tab()
     elif st.session_state.main_nav == "Catwise Analytics":
