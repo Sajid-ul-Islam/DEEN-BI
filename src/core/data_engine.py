@@ -78,10 +78,10 @@ def get_customer_insights(df_all):
     con.register('orders', df_all)
     
     # Calculate Base Metrics (RFM)
-    # Prefer Email over Phone for ID if Customer ID is missing
+    # Using Phone as the primary Customer ID as requested
     df_customers = con.execute("""
         SELECT 
-            COALESCE("Customer ID", Email, Phone, 'Unknown') as Customer_ID,
+            COALESCE(Phone, "Customer ID", Email, 'Unknown') as Customer_ID,
             ANY_VALUE(Email) as Email,
             ANY_VALUE(Phone) as Phone,
             MAX("Order Date") as Last_Purchase,

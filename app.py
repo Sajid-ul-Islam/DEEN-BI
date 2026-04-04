@@ -3,6 +3,26 @@ import sys
 from datetime import date
 import streamlit as st
 
+# Custom core/logic modules
+from src.core.persistence import init_state, save_state
+from src.ui.components import (
+    inject_base_styles,
+    render_header,
+    render_sidebar_shell,
+    render_sidebar_workspace_control,
+    render_footer,
+)
+from src.modules.retail_dashboard import render_retail_dashboard
+from src.modules.catwise import render_catwise_analytics_tab
+from src.modules.system_health import render_system_health_tab
+
+# Legacy imports
+from src.modules.sales import (
+    render_custom_period_tab,
+    render_customer_pulse_tab,
+    render_live_tab,
+)
+
 _original_dataframe = st.dataframe
 
 
@@ -22,8 +42,6 @@ def _numbered_dataframe(data, *args, **kwargs):
 
 st.dataframe = _numbered_dataframe
 
-# Ensure the app root is in the python path for module discovery
-# especially important for remote environments like Streamlit Cloud
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
@@ -37,26 +55,6 @@ st.set_page_config(
 
 
 def run_app():
-    from src.core.errors import get_logs
-    from src.core.persistence import init_state, save_state
-    from src.modules.sales import (
-        render_custom_period_tab,
-        render_customer_pulse_tab,
-        render_live_tab,
-    )
-    from src.ui.components import (
-        inject_base_styles,
-        render_header,
-        render_sidebar_shell,
-        render_sidebar_workspace_control,
-        render_footer,
-    )
-    from src.modules.retail_dashboard import render_retail_dashboard
-    from src.modules.catwise import render_catwise_analytics_tab
-    from src.modules.system_health import render_system_health_tab
-
-    from src.ui.bike_animation import render_bike_animation
-
     init_state()
     inject_base_styles()
 
@@ -65,12 +63,6 @@ def run_app():
 
         if "main_nav" not in st.session_state:
             st.session_state.main_nav = "Retail Dashboard"
-
-        st.caption("Navigation")
-        st.session_state.show_animation = st.toggle(
-            "Show motion effects",
-            value=st.session_state.get("show_animation", True),
-        )
 
         nav_options = [
             "Retail Dashboard",
@@ -106,8 +98,6 @@ def run_app():
         render_sidebar_workspace_control()
 
     render_header()
-    if st.session_state.get("show_animation"):
-        render_bike_animation()
 
     if st.session_state.main_nav == "Retail Dashboard":
         render_retail_dashboard()
