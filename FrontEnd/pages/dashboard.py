@@ -12,7 +12,6 @@ import streamlit as st
 from BackEnd.services.customer_insights import generate_customer_insights_from_sales
 from BackEnd.services.hybrid_data_loader import (
     estimate_woocommerce_load_time,
-    get_data_summary,
     get_woocommerce_full_history_status,
     get_woocommerce_orders_cache_status,
     get_woocommerce_stock_cache_status,
@@ -35,6 +34,48 @@ from FrontEnd.components.ui_components import (
 )
 from FrontEnd.utils.config import APP_DATA_START_DATE
 from FrontEnd.utils.error_handler import log_error
+
+
+DASHBOARD_SALES_COLUMNS = [
+    "order_id",
+    "order_date",
+    "order_total",
+    "customer_key",
+    "customer_name",
+    "order_status",
+    "source",
+    "city",
+    "state",
+    "qty",
+    "item_name",
+    "email",
+    "phone",
+    "item_revenue",
+    "line_total",
+    "item_cost",
+    "price",
+]
+
+FULL_HISTORY_COLUMNS = [
+    "order_id",
+    "order_date",
+    "customer_name",
+    "phone",
+    "email",
+    "item_name",
+    "order_total",
+]
+
+
+def _prune_dataframe(df: pd.DataFrame, preferred_columns: list[str]) -> pd.DataFrame:
+    sales = ensure_sales_schema(df)
+    if sales.empty:
+        return sales
+
+    available = [col for col in preferred_columns if col in sales.columns]
+    if not available:
+        return sales
+    return sales.loc[:, available].copy()
 
 
 def _build_dashboard_ml_bundle(df_woo_only: pd.DataFrame, df_customers: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -250,36 +291,50 @@ def render_dashboard_tab():
     )
     if should_load:
         try:
-            df_sales = ensure_sales_schema(
+            df_sales = _prune_dataframe(
                 load_hybrid_data(
                     start_date=start_date_str,
                     end_date=end_date_str,
                     include_gsheet=False,
                     include_woocommerce=True,
                     woocommerce_mode="cache_only",
-                )
+                ),
+                DASHBOARD_SALES_COLUMNS,
             )
-            df_woo_only = df_sales.copy()
-            
-            full_woo_history = load_full_woocommerce_history(end_date=end_date_str)
-            if not full_woo_history.empty:
-                history_cols = [
-                    col
-                    for col in ["order_id", "order_date", "customer_name", "phone", "email", "item_name", "order_total"]
-                    if col in full_woo_history.columns
-                ]
-                full_woo_history = full_woo_history[history_cols].copy()
-            df_customers = _build_dashboard_customer_insights(df_woo_only, full_woo_history)
             if df_sales.empty:
                 st.warning("No WooCommerce sales data was found for the selected date range.")
                 return
+
+            full_woo_history = _prune_dataframe(
+                load_full_woocommerce_history(end_date=end_date_str),
+                FULL_HISTORY_COLUMNS,
+            )
+
+            try:
+                df_customers = _build_dashboard_customer_insights(df_sales, full_woo_history)
+            except MemoryError as exc:
+                log_error(exc, context="Dashboard Load", details={"mode": "customer_history_disabled"})
+                df_customers = _build_dashboard_customer_insights(df_sales, pd.DataFrame())
+
+            try:
+                ml_bundle = _build_dashboard_ml_bundle(df_sales, df_customers)
+            except MemoryError as exc:
+                log_error(exc, context="Dashboard Load", details={"mode": "ml_disabled"})
+                ml_bundle = {"forecast": pd.DataFrame(), "customer_risk": pd.DataFrame(), "anomalies": pd.DataFrame()}
+
+            stock_df = load_cached_woocommerce_stock_data()
+            summary = {
+                "woocommerce_live": len(df_sales),
+                "stock_rows": len(stock_df),
+                "total": len(df_sales),
+            }
+
             st.session_state.dashboard_data = {
                 "sales": df_sales,
-                "woo_only": df_woo_only,
                 "customers": df_customers,
-                "summary": get_data_summary(woocommerce_mode="cache_only"),
-                "ml": _build_dashboard_ml_bundle(df_woo_only, df_customers),
-                "stock": load_cached_woocommerce_stock_data(),
+                "summary": summary,
+                "ml": ml_bundle,
+                "stock": stock_df,
                 "loaded_from_cache_hint": orders_status.get("status_message", ""),
                 "stock_cache_hint": stock_status.get("status_message", ""),
                 "full_history_hint": full_history_status.get("status_message", ""),
@@ -296,8 +351,8 @@ def render_dashboard_tab():
         return
 
     data = st.session_state.dashboard_data
-    df_sales = ensure_sales_schema(data["sales"])
-    df_woo_only = ensure_sales_schema(data["woo_only"])
+    df_sales = data["sales"]
+    df_woo_only = df_sales
     df_customers = data["customers"]
     summary = data.get("summary", {})
     ml_bundle = data.get("ml", {})
@@ -305,12 +360,12 @@ def render_dashboard_tab():
     st.caption(data.get("loaded_from_cache_hint", ""))
     st.caption(data.get("stock_cache_hint", ""))
     st.caption(data.get("full_history_hint", ""))
-    loaded_sales = df_sales[df_sales["order_date"].notna()].copy()
+    loaded_dates = pd.to_datetime(df_sales.get("order_date"), errors="coerce")
     render_loaded_date_context(
         requested_start=start_date,
         requested_end=end_date,
-        loaded_start=loaded_sales["order_date"].min() if not loaded_sales.empty else None,
-        loaded_end=loaded_sales["order_date"].max() if not loaded_sales.empty else None,
+        loaded_start=loaded_dates.min() if loaded_dates is not None and not loaded_dates.empty and loaded_dates.notna().any() else None,
+        loaded_end=loaded_dates.max() if loaded_dates is not None and not loaded_dates.empty and loaded_dates.notna().any() else None,
         label="Loaded sales activity",
     )
     if orders_status.get("is_running") or stock_status.get("is_running") or full_history_status.get("is_running"):
@@ -366,6 +421,17 @@ def render_business_intelligence(df_sales: pd.DataFrame, df_customers: pd.DataFr
 
 
 def render_today_vs_last_day_sales_chart(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
+    st.markdown("#### Exact Order Status Breakdown")
+    order_df = _build_order_level_dataset(df_sales)
+    if not order_df.empty and "order_status" in order_df.columns:
+        status_counts = order_df["order_status"].value_counts().reset_index()
+        status_counts.columns = ["Status", "Orders"]
+        status_cols = st.columns(min(len(status_counts), 5))
+        for idx, row in status_counts.iterrows():
+            with status_cols[idx % len(status_cols)]:
+                st.metric(row["Status"].title(), f"{row['Orders']:,}")
+    
+    st.divider()
     st.markdown("#### Today vs Previous Day Sales Comparison")
     sales = ensure_sales_schema(df_sales)
     sales = sales[sales["order_date"].notna()].copy()

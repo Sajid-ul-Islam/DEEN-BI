@@ -23,6 +23,7 @@ def _resolve_preview_columns(df: pd.DataFrame) -> list[str]:
         ["Tracking"],
         ["Product Name (main)", "Item Name"],
         ["Quantity", "Qty"],
+        ["Order Status", "Status"],
         ["Order Total Amount"],
     ]
 
@@ -200,9 +201,9 @@ def _render_order_sync(wc_service: WooCommerceService):
         with col1:
             status_filter = st.selectbox(
                 "Order Status",
-                ["any", "completed", "shipped", "processing", "on-hold", "pending"],
+                ["any", "pending", "processing", "on-hold", "completed", "cancelled", "refunded", "failed"],
                 index=0,
-                help="Select the order status to fetch from WooCommerce.",
+                help="Select the exact order status to fetch from the WooCommerce database.",
             )
         with col2:
             require_tracking = st.checkbox(
@@ -339,7 +340,7 @@ def _render_inventory_sync(wc_service: WooCommerceService):
 def render_woocommerce_tab():
     """Render the WooCommerce operations page."""
     st.header("Commerce Hub")
-    st.caption("Use this workspace to connect WooCommerce, fetch order data, review the preview, and sync live inventory.")
+    st.caption("Use this workspace to connect WooCommerce, fetch order data, review previews, and manage inventory sync in separate tabs.")
 
     credentials = get_woocommerce_credentials()
     if not credentials:
@@ -358,20 +359,27 @@ consumer_secret = "cs_your_consumer_secret"
     wc_service = WooCommerceService()
     st.success(f"Connected to {get_woocommerce_store_label()}. API keys stay hidden in Streamlit secrets.")
 
-    _render_order_sync(wc_service)
+    order_tab, inventory_tab, storage_tab = st.tabs([
+        "Order Sync",
+        "Inventory Sync",
+        "Storage Status",
+    ])
 
-    st.divider()
-    _render_inventory_sync(wc_service)
+    with order_tab:
+        _render_order_sync(wc_service)
 
-    st.divider()
-    st.subheader("Storage Status")
-    from BackEnd.services.duckdb_loader import get_data_completeness
+    with inventory_tab:
+        _render_inventory_sync(wc_service)
 
-    try:
-        completeness = get_data_completeness()
-        if completeness.empty:
-            st.info("No local data has been indexed yet.")
-        else:
-            st.dataframe(completeness, use_container_width=True, hide_index=True)
-    except Exception as exc:
-        st.caption(f"Could not load storage status: {exc}")
+    with storage_tab:
+        st.subheader("Storage Status")
+        from BackEnd.services.duckdb_loader import get_data_completeness
+
+        try:
+            completeness = get_data_completeness()
+            if completeness.empty:
+                st.info("No local data has been indexed yet.")
+            else:
+                st.dataframe(completeness, use_container_width=True, hide_index=True)
+        except Exception as exc:
+            st.caption(f"Could not load storage status: {exc}")
