@@ -420,43 +420,44 @@ def render_dashboard_tab():
         st.info("WooCommerce cache is being prepared. Core BI views will fill in as soon as the background sync finishes.")
 
     tabs = st.tabs([
-        "Business Intelligence",
-        "Executive Summary",
-        "Data Audit",
+        "Overview",
+        "Customers",
+        "Products",
         "Operations",
     ])
     with tabs[0]:
-        render_business_intelligence(df_sales, df_customers)
-    with tabs[1]:
+        st.caption("Core business pulse with the most important WooCommerce metrics only.")
         render_executive_summary(df_sales, df_customers, summary)
+        st.divider()
+        render_business_intelligence(df_sales, df_customers)
+        with st.expander("Data Confidence", expanded=False):
+            render_data_audit(df_sales, df_customers, start_date, end_date)
+    with tabs[1]:
+        st.caption("Customer growth, repeat behavior, and retention signals in one focused view.")
+        render_customer_behavior(df_woo_only, df_customers)
     with tabs[2]:
-        render_data_audit(df_sales, df_customers, start_date, end_date)
+        st.caption("Top products, stock position, and demand coverage without extra noise.")
+        render_product_performance(df_woo_only)
+        st.divider()
+        render_inventory_health(stock_df, ml_bundle.get("forecast", pd.DataFrame()))
     with tabs[3]:
+        st.caption("Secondary operational views for trends, geography, and machine-generated signals.")
         operations_tabs = st.tabs([
             "Sales Trends",
-            "Product Performance",
-            "Customer Behavior",
             "Geographic",
-            "Inventory",
             "Forecast & Alerts",
         ])
         with operations_tabs[0]:
             render_sales_trends(df_sales)
         with operations_tabs[1]:
-            render_product_performance(df_woo_only)
-        with operations_tabs[2]:
-            render_customer_behavior(df_woo_only, df_customers)
-        with operations_tabs[3]:
             render_geographic_insights(df_sales)
-        with operations_tabs[4]:
-            render_inventory_health(stock_df, ml_bundle.get("forecast", pd.DataFrame()))
-        with operations_tabs[5]:
+        with operations_tabs[2]:
             render_forecast_and_alerts(ml_bundle)
 
 
 def render_business_intelligence(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
     st.subheader("Business Intelligence")
-    st.caption("Executive comparison and rolling period-based sales performance from WooCommerce orders only.")
+    st.caption("Compact comparison views for the current WooCommerce performance window.")
 
     with st.expander("📅 Period Filter", expanded=False):
         c1, c2 = st.columns(2)
