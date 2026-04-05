@@ -2,7 +2,7 @@ APP_TITLE = "Automation Pivot"
 APP_VERSION = "v2.5.0"
 
 PRIMARY_NAV = [
-    "Dashboard",
+    "Business Intelligence",
     "Stream Monitor",
     "Customer Intelligence",
     "Commerce Hub",
