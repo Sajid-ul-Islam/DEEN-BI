@@ -15,6 +15,7 @@ from BackEnd.services.hybrid_data_loader import (
     load_comparison_data,
     load_hybrid_data,
     load_live_stream_data,
+    load_woocommerce_stock_data,
 )
 from BackEnd.services.ml_insights import build_ml_insight_bundle
 from BackEnd.utils.sales_schema import ensure_sales_schema
@@ -34,7 +35,7 @@ def render_dashboard_tab():
         "A cleaner BI-style operating view for revenue, demand, customer health, and geographic performance. The dashboard is now optimized for WooCommerce-first analysis with less visual noise and clearer executive signals.",
         chips=[
             "WooCommerce-first",
-            "Hybrid live data",
+            "Stream sheet locked",
             "Customer intelligence",
             "Modern BI layout",
         ],
@@ -43,13 +44,14 @@ def render_dashboard_tab():
     with st.sidebar:
         st.subheader("Data Connectors")
         live_source = st.radio(
-            "Primary Live Source",
-            ["WooCommerce API Only", "Merged (Woo + Sheets)", "Google Sheets Only"],
+            "Executive Trends Source",
+            ["WooCommerce API Only", "Merged (Woo + Sheets)", "Historical + Sheets Only"],
             index=0,
             key="dashboard_live_source",
+            help="Product, customer, forecast, and inventory views always use WooCommerce API data. This selector only changes the executive trend layer.",
         )
 
-    include_gsheet = live_source in {"Merged (Woo + Sheets)", "Google Sheets Only"}
+    include_gsheet = live_source in {"Merged (Woo + Sheets)", "Historical + Sheets Only"}
     include_woo = live_source in {"Merged (Woo + Sheets)", "WooCommerce API Only"}
 
     col1, col2, col3 = st.columns([2, 2, 1])
@@ -97,6 +99,7 @@ def render_dashboard_tab():
                 "customers": df_customers,
                 "summary": get_data_summary(),
                 "ml": build_ml_insight_bundle(df_woo_only, df_customers, horizon_days=7),
+                "stock": load_woocommerce_stock_data(),
             }
         except Exception as exc:
             log_error(exc, context="Dashboard Load")
@@ -113,6 +116,7 @@ def render_dashboard_tab():
     df_customers = data["customers"]
     summary = data.get("summary", {})
     ml_bundle = data.get("ml", {})
+    stock_df = data.get("stock", pd.DataFrame())
 
     tabs = st.tabs([
         "Executive Summary",
@@ -122,6 +126,7 @@ def render_dashboard_tab():
         "Product Performance",
         "Customer Behavior",
         "Geographic",
+        "Inventory",
         "Forecast & Alerts",
     ])
     with tabs[0]:
@@ -139,10 +144,13 @@ def render_dashboard_tab():
     with tabs[6]:
         render_geographic_insights(df_sales)
     with tabs[7]:
+        render_inventory_health(stock_df, ml_bundle.get("forecast", pd.DataFrame()))
+    with tabs[8]:
         render_forecast_and_alerts(ml_bundle)
 
 
 def render_live_stream_comparison():
+    st.caption("This comparison is locked to the dedicated Live Stream Google Sheet and the fixed Today vs Last Day comparison sheet.")
     st.subheader("📡 Live Stream Comparison (Today vs Last Day)")
     
     stream_df = load_live_stream_data()
@@ -184,6 +192,118 @@ def render_live_stream_comparison():
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Waiting for more stream activity to plot trends.")
+
+
+def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame):
+    st.subheader("Inventory Health")
+    st.caption("Live stock is fetched directly from the WooCommerce REST API.")
+    if stock_df is None or stock_df.empty:
+        st.info("No live stock snapshot is available yet from WooCommerce.")
+        return
+
+    inventory = stock_df.copy()
+    inventory["Stock Quantity"] = pd.to_numeric(inventory.get("Stock Quantity", 0), errors="coerce").fillna(0)
+    inventory["Price"] = pd.to_numeric(inventory.get("Price", 0), errors="coerce").fillna(0)
+    inventory["Inventory Value"] = inventory["Stock Quantity"] * inventory["Price"]
+
+    low_stock_threshold = 5
+    low_stock_df = inventory[inventory["Stock Quantity"] <= low_stock_threshold].copy()
+    out_of_stock_df = inventory[inventory["Stock Status"].astype(str).str.lower() == "outofstock"].copy()
+
+    notes = [
+        f"The inventory snapshot currently covers {len(inventory):,} WooCommerce products.",
+        f"{len(low_stock_df):,} products are at or below {low_stock_threshold} units.",
+        f"{len(out_of_stock_df):,} products are out of stock right now.",
+    ]
+    if "_imported_at" in inventory.columns and inventory["_imported_at"].notna().any():
+        notes.append(f"Latest stock sync in this session: {inventory['_imported_at'].dropna().max()}.")
+    render_commentary_panel("Inventory Commentary", notes)
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Products", f"{len(inventory):,}")
+        render_kpi_note("Counting mode: WooCommerce product rows")
+    with m2:
+        st.metric("Low Stock", f"{len(low_stock_df):,}")
+        render_kpi_note("Counting mode: stock quantity <= 5")
+    with m3:
+        st.metric("Out of Stock", f"{len(out_of_stock_df):,}")
+        render_kpi_note("Counting mode: stock_status = outofstock")
+    with m4:
+        st.metric("Inventory Value", f"TK {inventory['Inventory Value'].sum():,.0f}")
+        render_kpi_note("Counting mode: stock quantity x price")
+
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        st.markdown("#### Low Stock Watchlist")
+        st.dataframe(
+            inventory.sort_values(["Stock Quantity", "Name"], ascending=[True, True])
+            .head(20)[["Name", "SKU", "Stock Status", "Stock Quantity", "Price", "Inventory Value"]]
+            .rename(
+                columns={
+                    "Name": "Product",
+                    "Stock Status": "Status",
+                    "Stock Quantity": "Stock Qty",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+    with c2:
+        status_counts = inventory["Stock Status"].fillna("unknown").astype(str).value_counts().reset_index()
+        status_counts.columns = ["Status", "Count"]
+        fig_status = px.bar(
+            status_counts,
+            x="Status",
+            y="Count",
+            color="Count",
+            title="Stock Status Mix",
+            color_continuous_scale="Tealgrn",
+        )
+        fig_status.update_layout(height=350)
+        st.plotly_chart(fig_status, use_container_width=True)
+
+    if forecast_df is not None and not forecast_df.empty and "item_name" in forecast_df.columns:
+        demand_view = inventory.merge(
+            forecast_df,
+            left_on="Name",
+            right_on="item_name",
+            how="left",
+        )
+        demand_view["forecast_7d_units"] = pd.to_numeric(demand_view.get("forecast_7d_units", 0), errors="coerce").fillna(0)
+        demand_view["suggested_buffer_units"] = pd.to_numeric(demand_view.get("suggested_buffer_units", 0), errors="coerce").fillna(0)
+        demand_view["coverage_gap"] = demand_view["Stock Quantity"] - demand_view["suggested_buffer_units"]
+
+        st.markdown("#### Demand vs Stock Coverage")
+        st.caption("This compares WooCommerce stock counts against the demand forecast buffer for overlapping product names.")
+        st.dataframe(
+            demand_view.sort_values(["coverage_gap", "Stock Quantity"], ascending=[True, True])
+            .head(20)[
+                [
+                    "Name",
+                    "SKU",
+                    "Stock Quantity",
+                    "forecast_7d_units",
+                    "suggested_buffer_units",
+                    "coverage_gap",
+                    "risk_level",
+                    "reorder_comment",
+                ]
+            ]
+            .rename(
+                columns={
+                    "Name": "Product",
+                    "Stock Quantity": "Stock Qty",
+                    "forecast_7d_units": "Forecast 7d",
+                    "suggested_buffer_units": "Suggested Buffer",
+                    "coverage_gap": "Coverage Gap",
+                    "risk_level": "Demand State",
+                    "reorder_comment": "Suggestion",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def render_executive_summary(df_sales: pd.DataFrame, df_customers: pd.DataFrame, summary: dict):
@@ -479,6 +599,7 @@ def render_sales_trends(df: pd.DataFrame):
 
 def render_product_performance(df: pd.DataFrame):
     st.subheader("Product Performance")
+    st.caption("This view uses WooCommerce API order items only. Google Sheets are excluded here for cleaner item-level accuracy.")
     if df.empty:
         st.info("No product data available.")
         return
@@ -517,6 +638,7 @@ def render_product_performance(df: pd.DataFrame):
 
 def render_customer_behavior(df_sales: pd.DataFrame, df_customers: pd.DataFrame):
     st.subheader("Customer Behavior")
+    st.caption("This view uses WooCommerce API customer and order history only. Google Sheets are excluded here for retention accuracy.")
     if df_customers is None or df_customers.empty:
         st.info("Customer insights are not available yet for the selected period.")
         return

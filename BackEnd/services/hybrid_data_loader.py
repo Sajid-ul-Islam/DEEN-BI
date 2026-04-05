@@ -1,4 +1,4 @@
-"""Hybrid data loader - combines historical parquet with live Google Sheet and WooCommerce data."""
+"""Hybrid data loader - combines historical parquet with live sheets and WooCommerce data."""
 
 from __future__ import annotations
 
@@ -55,6 +55,33 @@ def load_woocommerce_live_data(
             context="Hybrid Loader - WooCommerce Live",
             details={"days": days, "start_date": start_date, "end_date": end_date},
         )
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=900)
+def load_woocommerce_stock_data() -> pd.DataFrame:
+    """Fetch live stock directly from the WooCommerce REST API."""
+    if not get_woocommerce_credentials():
+        return pd.DataFrame()
+
+    try:
+        from BackEnd.services.woocommerce_service import WooCommerceService
+
+        wc_service = WooCommerceService()
+        df = wc_service.get_stock_report()
+        if df.empty:
+            return df
+
+        stock_df = df.copy()
+        if "Stock Quantity" in stock_df.columns:
+            stock_df["Stock Quantity"] = pd.to_numeric(stock_df["Stock Quantity"], errors="coerce").fillna(0)
+        if "Price" in stock_df.columns:
+            stock_df["Price"] = pd.to_numeric(stock_df["Price"], errors="coerce").fillna(0.0)
+        stock_df["_source"] = "woocommerce_stock_api"
+        stock_df["_imported_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return stock_df
+    except Exception as exc:
+        log_error(exc, context="Hybrid Loader - WooCommerce Stock")
         return pd.DataFrame()
 
 

@@ -85,7 +85,7 @@ def render_snapshot_button(marker_id="snapshot-target"):
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 FEEDBACK_DIR = os.path.join(DATA_DIR, "feedback")
 INCOMING_DIR = os.path.join(DATA_DIR, "incoming")
-DEFAULT_GSHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOiRkybNzMNvEaLxSFsX0nGIiM07BbNVsBbsX1dG8AmGOmSu8baPrVYL0cOqoYN4tRWUj1UjUbH1Ij/pubhtml"
+LIVE_STREAM_GSHEET_URL = "https://docs.google.com/spreadsheets/d/1QQX4gDIEurTDkiyXcK1SO2-oYNqarhEg1fqRCVHspQw/edit?pli=1&gid=2118542421#gid=2118542421"
 os.makedirs(FEEDBACK_DIR, exist_ok=True)
 os.makedirs(INCOMING_DIR, exist_ok=True)
 
@@ -479,23 +479,11 @@ def load_latest_from_incoming():
 
 @st.cache_data(ttl=45, show_spinner=False)
 def load_from_google_sheet():
-    """Loads live data from a Google Sheet worksheet (CSV export)."""
-    sheet_url = get_setting("GSHEET_URL", DEFAULT_GSHEET_URL)
-    if sheet_url:
-        csv_url = normalize_gsheet_url_to_csv(sheet_url)
-        df_live, modified_at = _read_csv_with_last_modified(csv_url)
-        df_live = scrub_raw_dataframe(df_live)
-        return df_live, "google_sheet_live.csv", modified_at
-
-    sheet_id = get_setting("GSHEET_ID")
-    gid = str(get_setting("GSHEET_GID", "0"))
-    if not sheet_id:
-        raise ValueError("Missing GSHEET_URL (or GSHEET_ID) in secrets or environment.")
-
-    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    """Loads live stream data from the dedicated Google Sheet only."""
+    csv_url = normalize_gsheet_url_to_csv(LIVE_STREAM_GSHEET_URL)
     df_live, modified_at = _read_csv_with_last_modified(csv_url)
     df_live = scrub_raw_dataframe(df_live)
-    source_name = f"gsheet_{sheet_id}_{gid}.csv"
+    source_name = "live_stream_sheet.csv"
     return df_live, source_name, modified_at
 
 
@@ -565,12 +553,8 @@ def load_latest_from_gdrive_folder():
 def load_live_source(source_mode):
     """Routes loading by selected source mode."""
     res = None
-    if source_mode == "Incoming Folder":
-        res = load_latest_from_incoming()
-    elif source_mode == "Google Sheet":
+    if source_mode == "Live Stream Sheet":
         res = load_from_google_sheet()
-    elif source_mode == "Google Drive Folder":
-        res = load_latest_from_gdrive_folder()
 
     if res:
         st.session_state.live_sync_time = datetime.now()
@@ -1084,16 +1068,8 @@ def render_live_tab():
     """
     render_section_card("", welcome_msg)
 
-    source_options = ["Incoming Folder", "Google Sheet", "Google Drive Folder"]
-    default_idx = 0
-    if get_setting("GSHEET_URL", DEFAULT_GSHEET_URL):
-        default_idx = 1
-    elif get_setting("GSHEET_ID"):
-        default_idx = 1
-    elif get_setting("GDRIVE_FOLDER_ID") and get_gcp_service_account_info():
-        default_idx = 2
-
-    source_mode = source_options[default_idx]
+    source_mode = "Live Stream Sheet"
+    st.caption("This page is locked to the dedicated Live Stream Google Sheet for consistency.")
 
     # Freshness Indicator
     if st.session_state.get("live_sync_time"):
