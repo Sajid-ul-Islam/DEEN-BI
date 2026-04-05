@@ -53,21 +53,20 @@ def run_app():
 
     with st.sidebar:
         render_sidebar_branding()
-        st.subheader("Global Settings")
+        st.subheader("Workspace")
 
         st.session_state.show_animation = st.toggle(
             "Show motion effects",
-            value=st.session_state.get("show_animation", True),
+            value=st.session_state.get("show_animation", False),
         )
 
         if st.button("Save session state", use_container_width=True):
             save_state()
             st.success("Session state saved.")
 
-        # Unified Workspace Control Hub
         st.divider()
-        st.subheader("Workspace Control")
-        with st.expander("Reset Active Tool Data", expanded=True):
+        st.subheader("Controls")
+        with st.expander("Reset Active Tool Data", expanded=False):
             registered = st.session_state.get("registered_resets", {})
             if not registered:
                 st.info("No active tool data found.")
@@ -102,7 +101,7 @@ def run_app():
             if not logs:
                 st.info("No system events logged.")
             else:
-                for log in reversed(logs[-20:]):
+                for log in reversed(logs[-8:]):
                     st.caption(f"**{log.get('timestamp')}** | {log.get('context')}")
                     st.text(log.get("error"))
                     st.divider()
