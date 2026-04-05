@@ -1,6 +1,6 @@
-# Automation Pivot
+# DEEN Commerce BI
 
-Automation Pivot is a WooCommerce-only Streamlit business intelligence workspace for e-commerce sales, customer intelligence, inventory visibility, and operational diagnostics.
+DEEN Commerce BI is a WooCommerce-first Streamlit business intelligence workspace for e-commerce sales, customer intelligence, inventory visibility, and operational diagnostics.
 
 The current app is organized around four primary workspaces:
 
@@ -16,7 +16,8 @@ This codebase now follows a few key principles:
 - WooCommerce is the primary operational source for orders, customers, and inventory
 - local cache is treated as a first-class runtime layer for speed
 - long-running refresh work happens in the background whenever possible
-- customer lifecycle metrics use full available WooCommerce history, not just the visible date range
+- the dashboard defaults to the latest 30 days of WooCommerce activity for a lighter load
+- historical WooCommerce data is loaded only on demand when deeper retention context is needed
 - UI components and date handling are shared across pages for a more homogeneous product feel
 
 ## Quick Start
@@ -26,12 +27,14 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Date Defaults
+## Default Loading Behavior
 
-Across the app, date selectors are standardized to:
+The app now uses lighter defaults for the main BI workflow:
 
-- start date: `2022-08-01`
-- end date: latest available day (`today`)
+- `Business Intelligence` opens with the latest 30 days of WooCommerce sales data
+- the default sync action refreshes only that rolling 30-day sales window plus inventory cache
+- full WooCommerce history is not loaded automatically on dashboard open
+- historical customer context is available through an explicit `Load Historical Data` action
 
 ## Core Architecture
 
@@ -55,7 +58,7 @@ The app uses a WooCommerce local-first strategy:
 
 1. WooCommerce order and stock cache is read first for fast UI response
 2. stale or missing WooCommerce cache is refreshed in the background
-3. lifetime WooCommerce history can be built through a one-time full sync
+3. lifetime WooCommerce history can be built through a one-time on-demand full sync
 4. cached sales data is reused locally per user to keep the UI fast
 
 ## Customer and Revenue Counting
@@ -70,7 +73,8 @@ The app uses a WooCommerce local-first strategy:
 
 - `Unique Customers` means distinct normalized customers inside the visible filter
 - `New Customers` means customers whose first-ever WooCommerce order falls inside the relevant period
-- lifetime customer metrics use full available WooCommerce history from the local cache
+- default dashboard customer views reflect the rolling 30-day window
+- lifetime customer metrics become more accurate after an on-demand historical WooCommerce sync
 
 ## Working with the Codebase
 

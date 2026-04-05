@@ -1,10 +1,10 @@
-# Automation Pivot Architecture
+# DEEN Commerce BI Architecture
 
-This document describes the current application architecture after the WooCommerce-first BI refactor.
+This document describes the current application architecture for DEEN Commerce BI after the WooCommerce-first BI refactor.
 
 ## 1. Application Shape
 
-Automation Pivot is now structured as a local-first analytics app with a thin Streamlit shell and a service-oriented backend.
+DEEN Commerce BI is structured as a local-first analytics app with a thin Streamlit shell and a service-oriented backend.
 
 ### Primary navigation
 
@@ -76,7 +76,7 @@ Responsibilities:
 - WooCommerce API access
 - local cache persistence
 - background refresh scheduling
-- full WooCommerce history sync
+- on-demand full WooCommerce history sync
 - customer-lifecycle metrics
 - forecasting and anomaly signals
 
@@ -98,7 +98,8 @@ Responsibilities:
 2. show cache-backed UI immediately
 3. trigger background refresh if stale or incomplete
 4. recompute customer and BI views from normalized data
-5. use lifetime WooCommerce history for first-order and retention logic
+5. use the latest 30 days by default for dashboard rendering
+6. load lifetime WooCommerce history only when the user explicitly requests it for deeper retention logic
 
 ### Inventory flow
 
@@ -111,12 +112,12 @@ Responsibilities:
 
 The current app emphasizes user trust through a few shared rules:
 
-- date selectors default to `2022-08-01` through `today`
+- the main BI dashboard defaults to the latest 30 days of WooCommerce activity
 - pages show requested date range and actual loaded activity range
 - revenue in BI and KPI views is counted once per order
 - unique customers are filter-based
-- new customers are lifetime-history based
-- WooCommerce history sync runs in the background and does not block the UI
+- new customers are based on the best available history in local cache
+- WooCommerce history sync is on-demand and does not block the UI
 
 ## 6. Future Development Guidance
 

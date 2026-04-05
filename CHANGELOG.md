@@ -1,4 +1,4 @@
-# Automation-Pivot Changelog
+# DEEN Commerce BI Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.6.0] - 2026-04-05
 
 ### Changed
+- Renamed the active app branding to `DEEN Commerce BI`
+- Changed the Business Intelligence dashboard to load the latest 30 days of WooCommerce data by default
+- Moved historical WooCommerce loading behind an explicit on-demand action instead of automatic dashboard startup sync
 - Reorganized the app around a registry-driven primary navigation model
 - Simplified `app.py` into a thinner shell with sidebar helpers and dynamic page rendering
 - Standardized date defaults across the app to `2022-08-01` through `today`
@@ -103,7 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2025-11-01
 
 ### Added
-- Initial release of Automation-Pivot
+- Initial release of DEEN Commerce BI
 - Streamlit-based operations dashboard
 - Google Sheets integration for live order tracking
 - Sales analysis with Plotly charts

@@ -1,5 +1,17 @@
-## Sample Pull Request Template Description
+## Summary
 
-This is a sample pull request template. You can customize it to fit your project's needs.
+Describe the change in 2-4 short lines.
 
-Don't forget to commit your template file to the repository so that it can be used for future pull requests!
+## Why
+
+Explain the user or business problem this PR addresses.
+
+## Validation
+
+- [ ] `python -m py_compile ...`
+- [ ] relevant `python -m unittest ...` suite
+- [ ] manual Streamlit smoke check
+
+## Notes
+
+Add deployment notes, secret/config changes, or follow-up work if needed.
