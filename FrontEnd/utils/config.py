@@ -8,6 +8,7 @@ PRIMARY_NAV = (
     "Business Intelligence",
     "Customer Intelligence",
     "Commerce Hub",
+    "Business Cycles",
     "System Health",
 )
 
@@ -27,6 +28,11 @@ PRIMARY_PAGE_CONFIG = (
         "key": "commerce_hub",
         "label": "Commerce Hub",
         "description": "WooCommerce order sync, inventory fetch, and operational previews.",
+    },
+    {
+        "key": "business_cycles",
+        "label": "Business Cycles",
+        "description": "Order performance tracking based on 5 PM operational cutoffs.",
     },
     {
         "key": "system_health",

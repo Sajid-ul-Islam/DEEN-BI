@@ -1069,35 +1069,22 @@ def render_executive_summary(df_sales: pd.DataFrame, df_customers: pd.DataFrame,
     df = df_sales[df_sales["order_date"].notna()].copy()
     df["order_day"] = df["order_date"].dt.normalize()
     order_df = _build_order_level_dataset(df)
-    today = pd.Timestamp.now().normalize()
-    yesterday = today - pd.Timedelta(days=1)
-
-    today_data = order_df[order_df["order_day"] == today] if not order_df.empty else pd.DataFrame()
-    yesterday_data = order_df[order_df["order_day"] == yesterday] if not order_df.empty else pd.DataFrame()
-
     total_revenue = _sum_order_level_revenue(df)
     total_orders = order_df["order_id"].replace("", pd.NA).dropna().nunique() if not order_df.empty else 0
     active_customers = df["customer_key"].replace("", pd.NA).dropna().nunique()
     total_items = float(df["qty"].sum())
     pending_count = len(df[df["order_status"].str.lower().isin(["pending", "processing", "on-hold"])])
 
-    today_revenue = float(pd.to_numeric(today_data.get("order_total", 0), errors="coerce").fillna(0).sum()) if not today_data.empty else 0.0
-    yesterday_revenue = float(pd.to_numeric(yesterday_data.get("order_total", 0), errors="coerce").fillna(0).sum()) if not yesterday_data.empty else 0.0
-    today_orders = today_data["order_id"].replace("", pd.NA).dropna().nunique() if not today_data.empty else 0
-    yesterday_orders = yesterday_data["order_id"].replace("", pd.NA).dropna().nunique() if not yesterday_data.empty else 0
-    today_aov = today_revenue / today_orders if today_orders else 0
-    yesterday_aov = yesterday_revenue / yesterday_orders if yesterday_orders else 0
-
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
-        st.metric("Revenue", f"TK {total_revenue:,.0f}", _pct_delta(today_revenue, yesterday_revenue, "today vs yesterday"))
+        st.metric("Revenue", f"TK {total_revenue:,.0f}")
         render_kpi_note("Counting mode: one order_total per distinct order_id")
     with k2:
-        st.metric("Orders", f"{total_orders:,}", _pct_delta(today_orders, yesterday_orders, "today vs yesterday"))
+        st.metric("Orders", f"{total_orders:,}")
         render_kpi_note("Counting mode: distinct normalized order_id")
     with k3:
         overall_aov = total_revenue / total_orders if total_orders else 0
-        st.metric("AOV", f"TK {overall_aov:,.0f}", _pct_delta(today_aov, yesterday_aov, "today vs yesterday"))
+        st.metric("AOV", f"TK {overall_aov:,.0f}")
         render_kpi_note("Counting mode: order-level revenue / distinct orders")
     with k4:
         st.metric("Customers", f"{active_customers:,}")
