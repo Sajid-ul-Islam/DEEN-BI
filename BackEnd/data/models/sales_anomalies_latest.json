@@ -1,16 +1,6 @@
 {
-  "generated_at": "2026-04-06 06:34:30",
+  "generated_at": "2026-04-06 06:37:34",
   "rows": [
-    {
-      "order_day": "2026-04-06 00:00:00",
-      "revenue": 13970.0,
-      "metric": "revenue",
-      "z_score": -1.73,
-      "direction": "Drop",
-      "commentary": "Drop detected in revenue on 2026-04-06 (z=-1.73).",
-      "orders": NaN,
-      "aov": NaN
-    },
     {
       "order_day": "2026-04-06 00:00:00",
       "revenue": NaN,
@@ -22,12 +12,12 @@
       "aov": NaN
     },
     {
-      "order_day": "2026-04-05 00:00:00",
-      "revenue": 269712.0,
+      "order_day": "2026-04-06 00:00:00",
+      "revenue": 13970.0,
       "metric": "revenue",
-      "z_score": 5.11,
-      "direction": "Spike",
-      "commentary": "Spike detected in revenue on 2026-04-05 (z=5.11).",
+      "z_score": -1.73,
+      "direction": "Drop",
+      "commentary": "Drop detected in revenue on 2026-04-06 (z=-1.73).",
       "orders": NaN,
       "aov": NaN
     },
@@ -40,6 +30,16 @@
       "commentary": "Spike detected in aov on 2026-04-05 (z=28.81).",
       "orders": NaN,
       "aov": 7706.057142857143
+    },
+    {
+      "order_day": "2026-04-05 00:00:00",
+      "revenue": 269712.0,
+      "metric": "revenue",
+      "z_score": 5.11,
+      "direction": "Spike",
+      "commentary": "Spike detected in revenue on 2026-04-05 (z=5.11).",
+      "orders": NaN,
+      "aov": NaN
     },
     {
       "order_day": "2026-04-01 00:00:00",
@@ -173,16 +173,6 @@
     },
     {
       "order_day": "2026-03-17 00:00:00",
-      "revenue": NaN,
-      "metric": "orders",
-      "z_score": -1.97,
-      "direction": "Drop",
-      "commentary": "Drop detected in orders on 2026-03-17 (z=-1.97).",
-      "orders": 39.0,
-      "aov": NaN
-    },
-    {
-      "order_day": "2026-03-17 00:00:00",
       "revenue": 122909.0,
       "metric": "revenue",
       "z_score": -1.73,
@@ -192,32 +182,42 @@
       "aov": NaN
     },
     {
-      "order_day": "2026-03-14 00:00:00",
+      "order_day": "2026-03-17 00:00:00",
       "revenue": NaN,
       "metric": "orders",
-      "z_score": 1.52,
-      "direction": "Spike",
-      "commentary": "Spike detected in orders on 2026-03-14 (z=1.52).",
-      "orders": 73.0,
+      "z_score": -1.97,
+      "direction": "Drop",
+      "commentary": "Drop detected in orders on 2026-03-17 (z=-1.97).",
+      "orders": 39.0,
       "aov": NaN
     },
     {
       "order_day": "2026-03-14 00:00:00",
       "revenue": NaN,
       "metric": "aov",
-      "z_score": -1.82,
+      "z_score": -1.7,
       "direction": "Drop",
-      "commentary": "Drop detected in aov on 2026-03-14 (z=-1.82).",
+      "commentary": "Drop detected in aov on 2026-03-14 (z=-1.7).",
       "orders": NaN,
       "aov": 2509.2876712328766
+    },
+    {
+      "order_day": "2026-03-14 00:00:00",
+      "revenue": NaN,
+      "metric": "orders",
+      "z_score": 1.61,
+      "direction": "Spike",
+      "commentary": "Spike detected in orders on 2026-03-14 (z=1.61).",
+      "orders": 73.0,
+      "aov": NaN
     },
     {
       "order_day": "2026-03-13 00:00:00",
       "revenue": 284173.0,
       "metric": "revenue",
-      "z_score": 2.45,
+      "z_score": 2.7,
       "direction": "Spike",
-      "commentary": "Spike detected in revenue on 2026-03-13 (z=2.45).",
+      "commentary": "Spike detected in revenue on 2026-03-13 (z=2.7).",
       "orders": NaN,
       "aov": NaN
     },
@@ -225,9 +225,9 @@
       "order_day": "2026-03-13 00:00:00",
       "revenue": NaN,
       "metric": "orders",
-      "z_score": 4.2,
+      "z_score": 6.42,
       "direction": "Spike",
-      "commentary": "Spike detected in orders on 2026-03-13 (z=4.2).",
+      "commentary": "Spike detected in orders on 2026-03-13 (z=6.42).",
       "orders": 79.0,
       "aov": NaN
     },
@@ -235,9 +235,9 @@
       "order_day": "2026-03-12 00:00:00",
       "revenue": NaN,
       "metric": "orders",
-      "z_score": 1.63,
+      "z_score": 2.45,
       "direction": "Spike",
-      "commentary": "Spike detected in orders on 2026-03-12 (z=1.63).",
+      "commentary": "Spike detected in orders on 2026-03-12 (z=2.45).",
       "orders": 57.0,
       "aov": NaN
     },
@@ -245,9 +245,9 @@
       "order_day": "2026-03-12 00:00:00",
       "revenue": 238662.0,
       "metric": "revenue",
-      "z_score": 2.18,
+      "z_score": 2.49,
       "direction": "Spike",
-      "commentary": "Spike detected in revenue on 2026-03-12 (z=2.18).",
+      "commentary": "Spike detected in revenue on 2026-03-12 (z=2.49).",
       "orders": NaN,
       "aov": NaN
     },
@@ -255,10 +255,20 @@
       "order_day": "2026-03-11 00:00:00",
       "revenue": NaN,
       "metric": "orders",
-      "z_score": 1.7,
+      "z_score": 3.39,
       "direction": "Spike",
-      "commentary": "Spike detected in orders on 2026-03-11 (z=1.7).",
+      "commentary": "Spike detected in orders on 2026-03-11 (z=3.39).",
       "orders": 54.0,
+      "aov": NaN
+    },
+    {
+      "order_day": "2026-03-10 00:00:00",
+      "revenue": NaN,
+      "metric": "orders",
+      "z_score": -2.89,
+      "direction": "Drop",
+      "commentary": "Drop detected in orders on 2026-03-10 (z=-2.89).",
+      "orders": 45.0,
       "aov": NaN
     }
   ]
