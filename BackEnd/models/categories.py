@@ -1,139 +1,103 @@
 import re
 
-
 def _normalize(value) -> str:
     return str(value or "").strip().lower()
 
-
-def _has_any(text: str, keywords: list[str]) -> bool:
-    for kw in keywords:
-        # Use word boundaries to prevent substring overlaps (like 'bag' in 'cabbage')
-        # We handle multi-word keywords correctly here as well.
-        pattern = r"\b" + re.escape(kw.lower()) + r"\b"
-        if re.search(pattern, text.lower()):
-            return True
-    return False
-
-
-def _is_full_sleeve_orders(text: str) -> bool:
-    return "full sleeve" in text
-
-
-def _is_full_sleeve_sales(text: str) -> bool:
-    return _has_any(text, ["full sleeve", "long sleeve", "fs", "l/s"])
-
-
-def _tshirt_label(text: str, mode: str) -> str | None:
-    tshirt_keywords = ["t-shirt", "t shirt"] if mode == "orders" else ["t-shirt", "t shirt", "tee"]
-    if not _has_any(text, tshirt_keywords):
-        return None
-
-    if mode == "orders":
-        return "FS T-Shirt" if _is_full_sleeve_orders(text) else "HS T-Shirt"
-    return "FS T-Shirt" if _is_full_sleeve_sales(text) else "T-Shirt"
-
-
-def _shirt_label(text: str, mode: str) -> str | None:
-    if "shirt" not in text:
-        return None
-
-    if mode == "orders":
-        return "FS Shirt" if _is_full_sleeve_orders(text) else "HS Shirt"
-    return "FS Shirt" if _is_full_sleeve_sales(text) else "HS Shirt"
-
-
-_ORDER_RULES = [
-    ("Boxer", ["boxer"]),
-    ("Jeans", ["jeans"]),
-    ("Denim", ["denim"]),
-    ("Flannel", ["flannel"]),
-    ("Polo", ["polo"]),
-    ("Panjabi", ["panjabi"]),
-    ("Trousers", ["trouser"]),
-    ("Twill", ["twill", "chino"]),
-    ("Sweatshirt", ["sweatshirt"]),
-    ("Tank Top", ["tank top"]),
-    ("Pants", ["gabardine", "pant"]),
-    ("Contrast Shirt", ["contrast"]),
-    ("Turtleneck", ["turtleneck"]),
-    ("Wallet", ["wallet"]),
-    ("Kaftan", ["kaftan"]),
-    ("Active", ["active"]),
-    ("1 Pack Mask", ["mask"]),
-    ("Bag", ["bag"]),
-    ("Bottle", ["bottle"]),
-]
-
-_SALES_RULES = [
-    ("Boxer", ["boxer"]),
-    ("Jeans", ["jeans"]),
-    ("Denim", ["denim"]),
-    ("Flannel", ["flannel"]),
-    ("Polo Shirt", ["polo"]),
-    ("Panjabi", ["panjabi", "punjabi"]),
-    (
-        "Trousers",
-        ["trousers", "pant", "cargo", "trouser", "joggers", "track pant", "jogger"],
-    ),
-    ("Twill Chino", ["twill chino"]),
-    ("Mask", ["mask"]),
-    ("Water Bottle", ["water bottle"]),
-    ("Contrast Shirt", ["contrast"]),
-    ("Turtleneck", ["turtleneck", "mock neck"]),
-    ("Drop Shoulder", ["drop", "shoulder"]),
-    ("Wallet", ["wallet"]),
-    ("Kaftan", ["kaftan"]),
-    ("Active Wear", ["active wear"]),
-    ("Jersy", ["jersy"]),
-    ("Sweatshirt", ["sweatshirt", "hoodie", "pullover"]),
-    ("Jacket", ["jacket", "outerwear", "coat"]),
-    ("Belt", ["belt"]),
-    ("Sweater", ["sweater", "cardigan", "knitwear"]),
-    ("Passport Holder", ["passport holder"]),
-    ("Cap", ["cap"]),
-    ("Tank Top", ["tank top"]),
-    ("Bag", ["bag", "backpack"]),
-]
-
+def _has_any(keywords, text):
+    return any(
+        re.search(rf"\b{re.escape(kw.lower())}\b", text, re.IGNORECASE)
+        for kw in keywords
+    )
 
 def get_category_for_orders(name) -> str:
+    """Old order categorization (maintained for backward compatibility if needed)."""
     text = _normalize(name)
     if not text:
         return "Items"
 
-    for label, keywords in _ORDER_RULES:
-        if _has_any(text, keywords):
+    order_rules = [
+        ("Boxer", ["boxer"]),
+        ("Jeans", ["jeans"]),
+        ("Denim", ["denim"]),
+        ("Flannel", ["flannel"]),
+        ("Polo", ["polo"]),
+        ("Panjabi", ["panjabi"]),
+        ("Trousers", ["trouser"]),
+        ("Twill", ["twill", "chino"]),
+        ("Sweatshirt", ["sweatshirt"]),
+        ("Tank Top", ["tank top"]),
+        ("Pants", ["gabardine", "pant"]),
+        ("Contrast Shirt", ["contrast"]),
+        ("Turtleneck", ["turtleneck"]),
+        ("Wallet", ["wallet"]),
+        ("Kaftan", ["kaftan"]),
+        ("Active", ["active"]),
+        ("1 Pack Mask", ["mask"]),
+        ("Bag", ["bag"]),
+        ("Bottle", ["bottle"]),
+    ]
+
+    for label, keywords in order_rules:
+        if _has_any(keywords, text):
             return label
 
-    tshirt = _tshirt_label(text, "orders")
-    if tshirt:
-        return tshirt
+    fs_keywords = ["full sleeve"]
+    if _has_any(["t-shirt", "t shirt"], text):
+        return "FS T-Shirt" if any(kw in text for kw in fs_keywords) else "HS T-Shirt"
 
-    shirt = _shirt_label(text, "orders")
-    if shirt:
-        return shirt
+    if "shirt" in text:
+        return "FS Shirt" if any(kw in text for kw in fs_keywords) else "HS Shirt"
 
     words = text.split()
     if len(words) >= 2:
         return f"{words[0].title()} {words[1].title()}"
     return "Items"
 
-
 def get_category_for_sales(name) -> str:
-    text = _normalize(name)
-    if not text:
+    """Categorizes products based on keywords in their names (v9.5 Expert Rules)."""
+    name_str = _normalize(name)
+    if not name_str:
         return "Others"
 
-    for label, keywords in _SALES_RULES:
-        if _has_any(text, keywords):
-            return label
+    specific_cats = {
+        "Tank Top": ["tank top"],
+        "Boxer": ["boxer"],
+        "Jeans": ["jeans"],
+        "Denim Shirt": ["denim"],
+        "Flannel Shirt": ["flannel"],
+        "Polo Shirt": ["polo"],
+        "Panjabi": ["panjabi", "punjabi"],
+        "Trousers": ["trousers", "trouser"],
+        "Joggers": ["joggers", "jogger", "track pant"],
+        "Twill Chino": ["twill chino", "chino", "twill"],
+        "Mask": ["mask"],
+        "Leather Bag": ["bag", "backpack"],
+        "Water Bottle": ["water bottle"],
+        "Contrast Shirt": ["contrast"],
+        "Turtleneck": ["turtleneck", "mock neck"],
+        "Drop Shoulder": ["drop", "shoulder"],
+        "Wallet": ["wallet"],
+        "Kaftan Shirt": ["kaftan"],
+        "Active Wear": ["active wear"],
+        "Jersy": ["jersy"],
+        "Sweatshirt": ["sweatshirt", "hoodie", "pullover"],
+        "Jacket": ["jacket", "outerwear", "coat"],
+        "Belt": ["belt"],
+        "Sweater": ["sweater", "cardigan", "knitwear"],
+        "Passport Holder": ["passport holder"],
+        "Card Holder": ["card holder"],
+        "Cap": ["cap"],
+    }
 
-    tshirt = _tshirt_label(text, "sales")
-    if tshirt:
-        return tshirt
+    for cat, keywords in specific_cats.items():
+        if _has_any(keywords, name_str):
+            return cat
 
-    shirt = _shirt_label(text, "sales")
-    if shirt:
-        return shirt
+    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]
+    if _has_any(["t-shirt", "t shirt", "tee"], name_str):
+        return "FS T-Shirt" if _has_any(fs_keywords, name_str) else "HS T-Shirt"
+
+    if _has_any(["shirt"], name_str):
+        return "FS Shirt" if _has_any(fs_keywords, name_str) else "HS Shirt"
 
     return "Others"

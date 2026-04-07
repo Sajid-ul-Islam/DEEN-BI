@@ -3,82 +3,57 @@ import re
 
 # --- Category Logic ---
 def get_category_from_name(name):
-    """
-    Determines the category of an item based on its name using keyword matching.
-    """
-    name_str = str(name)
+    """Categorizes products based on keywords in their names (v9.5 Expert Rules)."""
+    name_str = str(name).lower()
 
-    def has_keyword(sub, text):
-        return bool(re.search(rf"\b{re.escape(sub.lower())}\b", text, re.IGNORECASE))
+    def has_any(keywords, text):
+        return any(
+            re.search(rf"\b{re.escape(kw.lower())}\b", text, re.IGNORECASE)
+            for kw in keywords
+        )
 
-    # --- Category Rules ---
-    # Specific items
-    if has_keyword("boxer", name_str):
-        return "Boxer"
-    if has_keyword("jeans", name_str):
-        return "Jeans"
-    if has_keyword("denim", name_str):
-        return "Denim"
-    if has_keyword("flannel", name_str):
-        return "Flannel"
-    if has_keyword("polo", name_str):
-        return "Polo"
-    if has_keyword("panjabi", name_str):
-        return "Panjabi"
-    if has_keyword("trouser", name_str):
-        return "Trousers"
-    if has_keyword("twill", name_str) or has_keyword("chino", name_str):
-        return "Twill"
-    if has_keyword("sweatshirt", name_str):
-        return "Sweatshirt"
-    if has_keyword("tank top", name_str):
-        return "Tank Top"
-    if has_keyword("drop shoulder", name_str):
-        return "Drop Shoulder"
-    if has_keyword("gabardine", name_str) or has_keyword("pant", name_str):
-        return "Pants"
+    specific_cats = {
+        "Tank Top": ["tank top"],
+        "Boxer": ["boxer"],
+        "Jeans": ["jeans"],
+        "Denim Shirt": ["denim"],
+        "Flannel Shirt": ["flannel"],
+        "Polo Shirt": ["polo"],
+        "Panjabi": ["panjabi", "punjabi"],
+        "Trousers": ["trousers", "trouser"],
+        "Joggers": ["joggers", "jogger", "track pant"],
+        "Twill Chino": ["twill chino", "chino", "twill"],
+        "Mask": ["mask"],
+        "Leather Bag": ["bag", "backpack"],
+        "Water Bottle": ["water bottle"],
+        "Contrast Shirt": ["contrast"],
+        "Turtleneck": ["turtleneck", "mock neck"],
+        "Drop Shoulder": ["drop", "shoulder"],
+        "Wallet": ["wallet"],
+        "Kaftan Shirt": ["kaftan"],
+        "Active Wear": ["active wear"],
+        "Jersy": ["jersy"],
+        "Sweatshirt": ["sweatshirt", "hoodie", "pullover"],
+        "Jacket": ["jacket", "outerwear", "coat"],
+        "Belt": ["belt"],
+        "Sweater": ["sweater", "cardigan", "knitwear"],
+        "Passport Holder": ["passport holder"],
+        "Card Holder": ["card holder"],
+        "Cap": ["cap"],
+    }
 
-    # Accessories & Misc
-    if has_keyword("contrast", name_str):
-        return "Contrast"
-    if has_keyword("turtleneck", name_str):
-        return "Turtleneck"
-    if has_keyword("wallet", name_str):
-        return "Wallet"
-    if has_keyword("kaftan", name_str):
-        return "Kaftan"
-    if has_keyword("Active", name_str):
-        return "Active"
-    if has_keyword("mask", name_str):
-        return "1 Pack Mask"
-    if has_keyword("Bag", name_str):
-        return "Bag"
-    if has_keyword("bottle", name_str):
-        return "Bottle"
+    for cat, keywords in specific_cats.items():
+        if has_any(keywords, name_str):
+            return cat
 
-    # Common Attributes
-    is_full_sleeve = has_keyword("full sleeve", name_str)
+    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]
+    if has_any(["t-shirt", "t shirt", "tee"], name_str):
+        return "FS T-Shirt" if has_any(fs_keywords, name_str) else "HS T-Shirt"
 
-    # T-Shirts
-    is_tshirt = has_keyword("t-shirt", name_str) or has_keyword("t shirt", name_str)
-    if is_full_sleeve and is_tshirt:
-        return "FS T-Shirt"
-    if is_tshirt and not is_full_sleeve:
-        return "T-Shirt"
+    if has_any(["shirt"], name_str):
+        return "FS Shirt" if has_any(fs_keywords, name_str) else "HS Shirt"
 
-    # Shirts
-    is_shirt = has_keyword("shirt", name_str)
-
-    if is_full_sleeve and is_shirt:
-        return "FS Shirt"
-    if is_shirt and not is_full_sleeve:
-        return "HS Shirt"
-
-    # Fallback: Use first two words
-    words = name_str.split()
-    if len(words) >= 2:
-        return f"{words[0]} {words[1]}"
-    return "Items"
+    return "Others"
 
 
 # --- Address Logic ---

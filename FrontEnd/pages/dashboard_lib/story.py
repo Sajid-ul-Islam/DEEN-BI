@@ -9,12 +9,12 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
     order_df = build_order_level_dataset(df_sales)
     total_orders = order_df["order_id"].nunique()
     aov = total_revenue / total_orders if total_orders else 0
-    sales_7d = df_sales[df_sales["order_date"] >= (pd.Timestamp.now() - pd.Timedelta(days=7))]
-    rev_7d = sum_order_level_revenue(sales_7d)
+    days_in_window = (df_sales["order_date"].max() - df_sales["order_date"].min()).days + 1 if not df_sales.empty else 1
+    
     narrative = []
-    if rev_7d > 0:
-        avg_daily = rev_7d / 7
-        narrative.append(f"In the last 7 days, your store has generated <b>TK {rev_7d:,.0f}</b> in revenue, averaging <b>TK {avg_daily:,.0f}</b> per day.")
+    if total_revenue > 0:
+        avg_daily = total_revenue / days_in_window if days_in_window > 0 else total_revenue
+        narrative.append(f"In this period, your store has generated <b>TK {total_revenue:,.0f}</b> in revenue, averaging <b>TK {avg_daily:,.0f}</b> per day.")
     if not df_customers.empty and "segment" in df_customers.columns:
         vips = len(df_customers[df_customers["segment"] == "VIP"])
         if vips > 0:
@@ -36,7 +36,7 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
             <div class="bi-audit-body">
                 {'<br><br>'.join(narrative)}
             </div>
-            <div class="bi-kpi-note" style="margin-top:1.2rem; background:rgba(79, 70, 229, 0.05); border:1px dashed rgba(79, 70, 229, 0.2);">
+            <div class="bi-kpi-note" style="margin-top:1.2rem; background:var(--primary-light, rgba(79, 70, 229, 0.05)); border:1px dashed var(--primary-border, rgba(79, 70, 229, 0.2)); color:var(--primary);">
                 💡 Tip: Revenue is counted using order-level totals to ensure 100% accuracy in multi-item checkouts.
             </div>
         </div>

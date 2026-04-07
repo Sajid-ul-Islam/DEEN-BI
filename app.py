@@ -2,7 +2,7 @@ import os
 
 import streamlit as st
 
-from FrontEnd.utils.config import APP_TITLE, PRIMARY_NAV
+from FrontEnd.utils.config import APP_TITLE
 from FrontEnd.utils.error_handler import ERROR_LOG_FILE, get_logs, log_error
 from FrontEnd.utils.state import init_state, save_state
 from FrontEnd.components import ui
@@ -47,17 +47,17 @@ def _render_workspace_sidebar():
         # 1. Timeline Control
         st.session_state.time_window = st.select_slider(
             "Time Window",
-            options=["Last Day", "Last 7 Days", "Last Month", "Last Quarter", "Last Year"],
+            options=["Yesterday & Today", "Last 7 Days", "Last Month", "Last Quarter", "Last Year"],
             value="Last 7 Days"
         )
 
         st.divider()
 
-        # 2. Dashboard Sub-Navigation
+        # 2. Executive Dashboard Navigation
         st.session_state.active_section = st.radio(
-            "Intelligence Navigation",
+            "Executive Dashboard",
             [
-                "💎 Executive Dashboard",
+                "💎 Market Overview",
                 "👥 Customer Behavior",
                 "🔍 Deep-Dive Clusters",
                 "📦 Inventory Health",

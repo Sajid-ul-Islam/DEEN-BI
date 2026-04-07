@@ -21,9 +21,6 @@ from FrontEnd.utils.error_handler import log_error
 
 DATA_FILE = Path(__file__).parent.parent.parent / "data" / "data.parquet"
 LOCAL_CACHE_DIR = Path(__file__).parent.parent.parent / "data" / "cache" / "local_users"
-LIVE_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOiRkybNzMNvEaLxSFsX0nGIiM07BbNVsBbsX1dG8AmGOmSu8baPrVYL0cOqoYN4tRWUj1UjUbH1Ij/pub?gid=2118542421&single=true&output=csv"
-LIVE_STREAM_URL = "https://docs.google.com/spreadsheets/d/1QQX4gDIEurTDkiyXcK1SO2-oYNqarhEg1fqRCVHspQw/export?format=csv&gid=2118542421"
-COMPARISON_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOiRkybNzMNvEaLxSFsX0nGIiM07BbNVsBbsX1dG8AmGOmSu8baPrVYL0cOqoYN4tRWUj1UjUbH1Ij/pub?gid=2136999354&single=true&output=csv"
 WOO_CACHE_TTL_MINUTES = 360
 STOCK_CACHE_TTL_MINUTES = 20
 REFRESH_LOCK_TTL_MINUTES = 90
@@ -613,56 +610,6 @@ def load_woocommerce_stock_data() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
-def load_live_2026_data() -> pd.DataFrame:
-    try:
-        response = requests.get(LIVE_SHEET_URL, timeout=60)
-        response.raise_for_status()
-        df = pd.read_csv(BytesIO(response.content))
-        if df.empty:
-            return df
-        df["year"] = df.get("year", "2026")
-        df["_source"] = df.get("_source", "live_gsheet")
-        df["_imported_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return ensure_sales_schema(df)
-    except Exception as exc:
-        log_error(exc, context="Hybrid Loader - Google Sheet Live", details={"url": LIVE_SHEET_URL})
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=900)
-def load_live_stream_data() -> pd.DataFrame:
-    """Load exclusive Live Stream data."""
-    try:
-        response = requests.get(LIVE_STREAM_URL, timeout=60)
-        response.raise_for_status()
-        df = pd.read_csv(BytesIO(response.content))
-        if df.empty:
-            return df
-        df["_source"] = "live_stream_gsheet"
-        df["_imported_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return ensure_sales_schema(df)
-    except Exception as exc:
-        log_error(exc, context="Hybrid Loader - Live Stream", details={"url": LIVE_STREAM_URL})
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=900)
-def load_comparison_data() -> pd.DataFrame:
-    """Load Comparison data for Today vs Last Day analysis."""
-    try:
-        response = requests.get(COMPARISON_SHEET_URL, timeout=60)
-        response.raise_for_status()
-        df = pd.read_csv(BytesIO(response.content))
-        if df.empty:
-            return df
-        df["_source"] = "comparison_gsheet"
-        return ensure_sales_schema(df)
-    except Exception as exc:
-        log_error(exc, context="Hybrid Loader - Comparison Sheet", details={"url": COMPARISON_SHEET_URL})
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=3600)
 def load_historical_data() -> pd.DataFrame:
     data_dir = DATA_FILE.parent
     parquet_files = list(data_dir.glob("*.parquet"))
@@ -700,7 +647,6 @@ def _dedupe_orders(df: pd.DataFrame) -> pd.DataFrame:
 def load_hybrid_data(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    include_gsheet: bool = True,
     include_woocommerce: bool = True,
     woocommerce_mode: str = "live",
 ) -> pd.DataFrame:

@@ -164,6 +164,10 @@ class WooCommerceService:
                 except:
                     pass
 
+            # Extraction of Coupons & Campaigns
+            coupons = [c.get("code", "") for c in order.get("coupon_lines", [])]
+            coupon_str = ", ".join(coupons) if coupons else "None"
+            
             # Tracking extraction
             tracking_number = "N/A"
             if order.get("meta_data"):
@@ -191,6 +195,7 @@ class WooCommerceService:
                     "Qty": item.get("quantity"),
                     "Item Cost": item.get("price"),
                     "Tracking": tracking_number,
+                    "Coupons": coupon_str,
                     "_source": "woocommerce_api"
                 }
                 flattened_data.append(item_data)
@@ -240,7 +245,7 @@ class WooCommerceService:
             response = self.wcapi.get("products", params={
                 "page": page,
                 "per_page": per_page,
-                "status": "publish",
+                "status": "publish", # Exclude drafts and private products
             })
             
             if response.status_code != 200:
@@ -262,6 +267,8 @@ class WooCommerceService:
                     "Stock Status": stock_status,
                     "Stock Quantity": stock_quantity or 0,
                     "Price": float(p.get("price", 0)) if p.get("price") else 0,
+                    "Regular Price": float(p.get("regular_price", 0)) if p.get("regular_price") else 0,
+                    "Sale Price": float(p.get("sale_price", 0)) if p.get("sale_price") else 0,
                     "Category": ", ".join([c.get("name") for c in p.get("categories", [])]),
                     "Manage Stock": bool(p.get("manage_stock")),
                     "Product Type": p.get("type", ""),

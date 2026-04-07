@@ -13,7 +13,7 @@ def setup_theme():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
         :root {
-            --primary: #6750A4; /* M3 Primary Indigo */
+            --primary: #6750A4;
             --background: #FEF7FF;
             --surface: #FFFFFF;
             --surface-variant: #E7E0EC;
@@ -24,13 +24,16 @@ def setup_theme():
             --red: #ef4444;
         }
 
-        [data-theme="dark"] {
-            --primary: #D0BCFF;
-            --background: #141218;
-            --surface: #1C1B1F;
-            --surface-variant: #49454F;
-            --on-surface: #E6E1E5;
-            --outline: #938F99;
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #D0BCFF;
+                --background: #141218;
+                --surface: #1C1B1F;
+                --surface-variant: #49454F;
+                --on-surface: #E6E1E5;
+                --on-surface-variant: #CAC4D0;
+                --outline: #938F99;
+            }
         }
 
         html, body, [class*="css"] {
@@ -99,6 +102,30 @@ def setup_theme():
             padding-bottom: 5rem !important;
         }
 
+        /* Mobile Responsiveness for 6-pillar metrics */
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"] {
+                flex-direction: row !important;
+                flex-wrap: wrap !important;
+            }
+            [data-testid="stColumn"] {
+                min-width: calc(50% - 1rem) !important;
+                flex: 1 1 calc(50% - 1rem) !important;
+            }
+            [data-testid="stMetricValue"] {
+                font-size: 1.5rem !important;
+            }
+            .hub-page_footer {
+                padding: 10px 0 20px 0 !important; /* Extra bottom for mobile nav bars */
+            }
+        }
+
+        @media (max-width: 480px) {
+            [data-testid="stColumn"] {
+                min-width: 100% !important;
+            }
+        }
+
         /* Hero and Headers */
         .bi-hero {
             background: var(--surface) !important;
@@ -141,6 +168,10 @@ def setup_theme():
             margin-right: 8px;
             animation: pulse-dot 2s infinite;
         }
+
+        /* Metric Growth indicators */
+        .delta-up { color: var(--green) !important; font-weight: 700 !important; font-size: 0.85rem !important; margin-top: 4px; }
+        .delta-down { color: var(--red) !important; font-weight: 700 !important; font-size: 0.85rem !important; margin-top: 4px; }
 
         @keyframes pulse-dot {
             0% { transform: scale(0.95); opacity: 0.7; }
@@ -486,11 +517,23 @@ def setup_theme():
             }
         }
         
-        /* Ensure dialogs are scrollable and properly sized */
-        div[role="dialog"] {
-            max-width: 95vw !important;
-            max-height: 90vh !important;
-            overflow-y: auto !important;
+        /* Fixed Bottom Footer */
+        .hub-page_footer {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background: var(--background);
+            opacity: 0.98;
+            backdrop-filter: blur(8px);
+            border-top: 1px solid var(--surface-variant);
+            padding: 12px 0;
+            z-index: 1000;
+        }
+        
+        /* Ensure content doesn't get hidden behind the fixed footer */
+        .main .block-container {
+            padding-bottom: 80px !important;
         }
         </style>
         """,
@@ -521,33 +564,18 @@ def sidebar_branding():
         sync_label = "Just now" if mins < 1 else f"{mins}m ago"
         sync_html = f'<div style="font-size:0.75rem; color:#64748b; margin-top:10px;">🔄 Last Synced: {sync_label}</div>'
 
-    # Render exactly as previous vertical stack
-    st.markdown(
-        f"""<div class="hub-sidebar-brand">
-            <div class="hub-sidebar-kicker">Operating System</div>
-            <div style="font-weight:700; font-size:1.1rem; line-height:1.2;">
-                DEEN Commerce BI
-            </div>
-            <div style="font-size:0.85rem; color:#64748b; margin-top:0.25rem;">
-                Unified commerce intelligence for revenue, customers, cycles, and CRM Analytics.
-            </div>
-            <div style="font-size:0.8rem; color:#64748b; margin-top:0.45rem;">
-                {APP_VERSION}
-            </div>
-            {sync_html}
-        </div>""",
-        unsafe_allow_html=True,
-    )
+    # Minimal branding: Only show sync status if available
+    if sync_html:
+        st.markdown(f'<div class="hub-sidebar-brand">{sync_html}</div>', unsafe_allow_html=True)
 
 
 def page_header():
     """Minimal page_header for the main page content area."""
     st.markdown(
         f"""
-        <div class="hub-title-row">
+        <div class="hub-title-row" style="margin-bottom:0;">
             <div>
-                <h1 class="hub-title">{APP_TITLE} <span style="color:var(--primary);">{APP_VERSION}</span></h1>
-                <p class="hub-subtitle">Commerce BI with operational storytelling, customer intelligence, and CRM Analytics context.</p>
+                <h1 class="hub-title" style="margin-bottom:0;">{APP_TITLE}</h1>
             </div>
         </div>
         """,
@@ -601,7 +629,7 @@ def page_footer():
                 <span style="color:var(--text-muted); margin:0 12px; opacity:0.5;">|</span>
                 <a href="https://deencommerce.com/" target="_blank" style="color:var(--primary); text-decoration:none;">
                     <img src="{logo_src}" width="20" class="deen-logo-small" onerror="this.style.display='none'">
-                    Powered by <b>DEEN Commerce</b>
+                    Powered by <b>DEEN Commerce Ltd.</b>
                 </a>
             </div>
         </div>

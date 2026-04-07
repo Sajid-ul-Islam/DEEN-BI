@@ -27,8 +27,7 @@ def badge(note: str):
 def icon_metric(label: str, value: str, icon: str = "📊", delta: str = "", delta_val: float = 0):
     delta_class = "delta-up" if delta_val >= 0 else "delta-down"
     delta_icon = "↑" if delta_val >= 0 else "↓"
-    delta_prefix = "+" if delta_val > 0 else ""
-    delta_html = f'<div class="metric-delta {delta_class}">{delta_icon} {delta_prefix}{delta}</div>' if delta else ""
+    delta_html = f'<div class="metric-delta {delta_class}">{delta_icon} {delta}</div>' if delta else ""
     
     st.markdown(
         f"""
