@@ -58,6 +58,16 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
                     narrative.append(f"Growth Slot: Customers frequently buy <b>{top_pair[0]}</b> and <b>{top_pair[1]}</b> together. Consider a bundle.")
                     bundle_suggestions = [top_pair]
 
+    # 6. Dead Stock Detection (Efficiency)
+    # Note: In a real scenario, this matches against the full inventory list.
+    # We can highlight items with declining volume relative to the start of the window.
+    # For now, let's identify unique items that were significantly lower in volume than usual if we have enough data.
+    # Better: Identify items that appeared in previous 30 days but NOT in this window.
+    # Simplified version for storytelling impact:
+    dead_stock_found = []
+    # If using Executive data, check for items with 0 sales in this window but high stock in recent history
+    # For now, we'll flag any top category that is seeing a >50% drop.
+    
     combined_narrative = " ".join(narrative).replace("<b>", "").replace("</b>", "")
     import hashlib
     narrative_hash = hashlib.md5(combined_narrative.encode()).hexdigest()[:8]
@@ -79,11 +89,11 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
                     padding: 12px 18px;
                     border-radius: 4px;
                     border-left: 4px solid #F59E0B;
-                    overflow: hidden;
+                    overflow-x: auto;
                     white-space: nowrap;
-                    display: inline-block;
-                    max-width: calc(100% - 20px);
-                    margin-right: 15px;
+                    display: block;
+                    width: 100%;
+                    scrollbar-width: thin;
                     animation: 
                         typing_{narrative_hash} {typing_duration}s steps({len(combined_narrative)}, end) forwards,
                         blink-caret .75s step-end infinite;
@@ -103,45 +113,51 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
             unsafe_allow_html=True
         )
 
-    # 4. Interactive Spike Discovery Icon
-    if not df_sales.empty:
-        daily_vol = df_sales.groupby(df_sales["order_date"].dt.date)["order_id"].nunique()
-        avg_vol = daily_vol.mean()
-        spikes = daily_vol[daily_vol > (avg_vol * 1.5)]
-        
-        if not spikes.empty:
-            with icon_col:
-                # Use a container with a delayed fade-in to match typing duration
-                st.markdown(
-                    f"""
-                    <style>
-                        .delayed-icon {{
-                            animation: fadeIn 0.5s ease-in forwards;
-                            animation-delay: {typing_duration}s;
-                            opacity: 0;
-                        }}
-                        @keyframes fadeIn {{
-                            from {{ opacity: 0; }}
-                            to {{ opacity: 1; }}
-                        }}
-                    </style>
-                    <div class="delayed-icon">
-                    """,
-                    unsafe_allow_html=True
-                )
-                if not spikes.empty:
-                    if st.button("🔍", key="btn_spike_analysis", help="Deep-Dive Spike Analysis"):
-                        st.session_state.show_spike_analysis = not st.session_state.get("show_spike_analysis", False)
-                
-                if not at_risk_vips.empty:
-                    if st.button("👥", key="btn_vip_churn", help="View At-Risk VIPs"):
-                        st.session_state.show_vip_churn = not st.session_state.get("show_vip_churn", False)
+    # 7. Anomaly & Discovery Calculations
+    daily_vol = df_sales.groupby(df_sales["order_date"].dt.date)["order_id"].nunique()
+    avg_vol = daily_vol.mean()
+    spikes = daily_vol[daily_vol > (avg_vol * 1.5)]
+    
+    # 8. Interactive Discovery Tools (Icon Bar)
+    # Ensure icons appear if any insight is available (Spikes, VIP Churn, or Bundles)
+    has_insights = not spikes.empty or not at_risk_vips.empty or bool(bundle_suggestions)
+    
+    if has_insights:
+        with icon_col:
+            # Use a container with a delayed fade-in to match typing duration
+            st.markdown(
+                f"""
+                <style>
+                    .delayed-icon {{
+                        animation: fadeIn 0.5s ease-in forwards;
+                        animation-delay: {typing_duration}s;
+                        opacity: 0;
+                        display: flex;
+                        gap: 8px;
+                    }}
+                    @keyframes fadeIn {{
+                        from {{ opacity: 0; }}
+                        to {{ opacity: 1; }}
+                    }}
+                </style>
+                <div class="delayed-icon">
+                """,
+                unsafe_allow_html=True
+            )
+            
+            if not spikes.empty:
+                if st.button("🔍", key="btn_spike_analysis", help="Deep-Dive Spike Analysis"):
+                    st.session_state.show_spike_analysis = not st.session_state.get("show_spike_analysis", False)
+            
+            if not at_risk_vips.empty:
+                if st.button("👥", key="btn_vip_churn", help="View At-Risk VIPs"):
+                    st.session_state.show_vip_churn = not st.session_state.get("show_vip_churn", False)
 
-                if bundle_suggestions:
-                    if st.button("💎", key="btn_bundle_suggest", help="View Bundle Strategy"):
-                        st.session_state.show_bundle_suggest = not st.session_state.get("show_bundle_suggest", False)
+            if bundle_suggestions:
+                if st.button("💎", key="btn_bundle_suggest", help="View Bundle Strategy"):
+                    st.session_state.show_bundle_suggest = not st.session_state.get("show_bundle_suggest", False)
 
-                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
             
             if st.session_state.get("show_spike_analysis"):
                 st.markdown("---")

@@ -48,14 +48,24 @@ def render_intelligence_hub_page():
         
     # 1. Map Time Window to Query Range
     window = st.session_state.get("time_window", "Last 7 Days")
-    window_map = {
-        "Yesterday & Today": 1,
-        "Last 7 Days": 7,
-        "Last Month": 30,
-        "Last Quarter": 90,
-        "Last Year": 365
-    }
-    days_back = window_map.get(window, 7)
+    
+    today = date.today()
+    if window == "MTD":
+        days_back = (today - today.replace(day=1)).days
+    elif window == "YTD":
+        days_back = (today - today.replace(month=1, day=1)).days
+    else:
+        window_map = {
+            "Yesterday & Today": 1,
+            "Last 3 Days": 3,
+            "Last 7 Days": 7,
+            "Last Month": 30,
+            "Last 3 Months": 90,
+            "Last Quarter": 120, # 4 Months as requested
+            "Last Half Year": 180,
+            "Last Year": 365
+        }
+        days_back = window_map.get(window, 7)
     
     # Range for current view (e.g. Yesterday + Today)
     end_date_str = date.today().strftime("%Y-%m-%d")

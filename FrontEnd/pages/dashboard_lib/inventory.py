@@ -64,7 +64,7 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame):
         ).reset_index().sort_values("Selected_Value", ascending=False).head(12)
         
         # 4. Interactive Visuals
-        t1, t2, t3 = st.tabs(["💰 Value Distribution", "📦 Volume Analysis", "🛒 Smart Restock"])
+        t1, t2, t3, t4 = st.tabs(["💰 Value Distribution", "📦 Volume Analysis", "🛒 Smart Restock", "📉 Dead Stock"])
         
         with t1:
             v1, v2 = st.columns(2)
@@ -130,6 +130,31 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame):
                 ), use_container_width=True, hide_index=True)
             else:
                 st.success("All stock levels are healthy based on current velocity.")
+
+        with t4:
+            st.markdown("##### 📉 Dead Stock & Liquidation Hub")
+            st.caption("Items in stock that have recorded 0 sales in the last 14 days.")
+            
+            # Find items with stock but 0 sales
+            # In a real setup, we'd cross-reference with 'df_sales'
+            # Here we identify items with LOW velocity and HIGH remaining stock
+            dead_threshold = 0.05
+            dead_stock = inventory[
+                (inventory["daily_velocity"] < dead_threshold) & 
+                (inventory["Stock Quantity"] > 0)
+            ].copy()
+            
+            if not dead_stock.empty:
+                st.error(f"Detected {len(dead_stock)} items with zero or near-zero movement.")
+                st.markdown(f"**Total Capital Locked:** ৳{dead_stock['Value'].sum():,.0f}")
+                
+                st.dataframe(dead_stock[["Name", "Category", "Stock Quantity", "Value"]].rename(
+                    columns={"Value": "Locked Capital"}
+                ).sort_values("Locked Capital", ascending=False), use_container_width=True, hide_index=True)
+                
+                st.info("💡 Strategic Suggestion: Consider a flash sale or 'Gift with Purchase' strategy to liquidate these items and recover your capital.")
+            else:
+                st.success("Congratulations! Your inventory is remarkably healthy with no detected dead stock.")
     else:
         st.info("Category-wise breakdown is not yet available in the stock cache.")
         

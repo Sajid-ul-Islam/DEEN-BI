@@ -52,6 +52,13 @@ def render_reset_confirm(label: str, tool_id: str, reset_callback):
                 st.session_state[f"pending_reset_{tool_id}"] = False
                 st.rerun()
 
+# Standard columns for operational ledgers
+DASHBOARD_SALES_COLUMNS = [
+    "order_id", "order_date", "order_total", "customer_key", "customer_name",
+    "order_status", "source", "city", "state", "qty", "item_name",
+    "item_revenue", "line_total", "item_cost", "price", "sku", "Category", "Coupons"
+]
+
 def load_live_source() -> Tuple[pd.DataFrame, str, datetime]:
     """
     Data Loading Pipeline.
@@ -65,6 +72,10 @@ def load_live_source() -> Tuple[pd.DataFrame, str, datetime]:
 
     # Fetch fresh live data using hybrid loader
     df = load_hybrid_data(start_date=today_str, end_date=today_str, woocommerce_mode="live")
+    
+    # Apply Schema Standardization
+    from .data_helpers import prune_dataframe
+    df = prune_dataframe(df, DASHBOARD_SALES_COLUMNS)
     
     source_name = "WooCommerce REST API"
     modified_at = datetime.now()
@@ -245,7 +256,15 @@ def process_data(df: pd.DataFrame, mapping: Dict[str, str], is_historical: bool 
         timeframe.columns = ["Hour", "Revenue", "Volume"]
 
     # 5. DRILL DOWN 
-    available_drill = [c for c in [id_col, n_col, q_col, c_col, s_col, m_col] if c in w_df.columns]
+    # Standard operational columns should always be included in drill-down
+    ledger_cols = ["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]
+    available_drill = [c for c in ledger_cols if c in w_df.columns]
+    
+    # Add mapping columns if they weren't in ledger_cols
+    for mapping_col in [n_col, q_col, c_col, s_col, m_col]:
+        if mapping_col and mapping_col in w_df.columns and mapping_col not in available_drill:
+            available_drill.append(mapping_col)
+            
     drill = w_df[available_drill].copy()
     
     return {
@@ -332,19 +351,19 @@ def render_dashboard_output(data_bundle: Dict[str, Any]):
             o_count = summ["proc_orders"]
             i_count = int(summ["proc_units"])
             r_count = summ["proc_revenue"]
-            d_text = f"{summ['pb_orders']} in Backlog"
+            d_text = f"{summ['pb_orders']} in Hold/Waiting" if summ["pb_orders"] > 0 else ""
             d_val = summ['pb_orders']
             i_label = "item to be sold"
         else:
-            target_title = "Operational Hub: Backlog"
+            target_title = "Operational Hub: Hold/Waiting"
             target_icon = "📥"
             o_count = summ["pb_orders"]
             i_count = int(summ["pb_units"])
             r_count = summ["pb_revenue"]
             # Even in backlog view, we can show if there's any stray processing leftover
-            d_text = f"{summ['proc_orders']} left in Processing" if summ['proc_orders'] > 0 else "All Processing Clear!"
+            d_text = f"{summ['proc_orders']} left in Processing" if summ["proc_orders"] > 0 else ""
             d_val = 0
-            i_label = "total units pending"
+            i_label = "total units waiting"
 
         ui.operational_card(
             title=target_title,
@@ -486,9 +505,9 @@ def render_live_tab():
         else:
             df_pb = df_raw[is_hold | is_waiting].copy()
         
-        with st.expander(f"📥 Pending & Backlog Queue ({len(df_pb)} orders)", expanded=False):
+        with st.expander(f"📥 Hold/Waiting Ledger ({len(df_pb)} orders)", expanded=False):
             if df_pb.empty:
-                st.success("🎉 No orders in Pending & Backlog queue!")
+                st.success("🎉 No orders in Hold/Waiting!")
             else:
                 st.dataframe(df_pb[["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
                              use_container_width=True, hide_index=True)
