@@ -10,6 +10,7 @@ from .data_display import file_summary, export_to_excel, show_last_updated, _saf
 from .interactive import floating_action_bar, dialog_confirm
 from .animation import animation_bike
 from .ai_chatbot import floating_chat
+from .mui_components import mui_stat_card, render_mui_dashboard_sync
 
 __all__ = [
     "setup_theme",
@@ -36,4 +37,6 @@ __all__ = [
     "show_last_updated",
     "animation_bike",
     "floating_chat",
+    "mui_stat_card",
+    "render_mui_dashboard_sync",
 ]

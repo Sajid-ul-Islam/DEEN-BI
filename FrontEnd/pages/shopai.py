@@ -238,7 +238,7 @@ def build_shopai_crm_summary(
         recommendations.append("ShopAI conversation load is balanced. Keep automations focused on fast order-tracking and refund resolution.")
 
     return {
-        "conversations": frame,
+        "conversations": frame,remove
         "status_mix": status_mix,
         "platform_mix": platform_mix,
         "segment_mix": segment_mix,

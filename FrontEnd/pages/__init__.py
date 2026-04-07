@@ -5,14 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from .customer_insights import render_customer_insight_tab
-from .dashboard import render_dashboard_tab
-from .system_health import render_system_health_tab
-from .woocommerce import render_woocommerce_tab
-from .cycle_analytics import render_cycle_analytics_tab
+from .dashboard import render_intelligence_hub_page
+from .commerce_ops import render_commerce_ops_page
 from .shopai import render_shopai_tab
-from .orders_analytics import render_orders_analytics_tab
-from .operations_hub import render_operations_hub_tab
+from .system_health import render_system_health_tab
+
 from FrontEnd.utils.config import PRIMARY_PAGE_CONFIG
 
 
@@ -25,13 +22,9 @@ class PrimaryPage:
 
 
 _PAGE_RENDERERS = {
-    "business_intelligence": render_dashboard_tab,
-    "customer_intelligence": render_customer_insight_tab,
-    "commerce_hub": render_woocommerce_tab,
-    "business_cycles": render_cycle_analytics_tab,
+    "intelligence_hub": render_intelligence_hub_page,
+    "commerce_ops": render_commerce_ops_page,
     "shop_ai_crm": render_shopai_tab,
-    "orders_analytics": render_orders_analytics_tab,
-    "operations_hub": render_operations_hub_tab,
     "system_health": render_system_health_tab,
 }
 

@@ -13,22 +13,24 @@ def setup_theme():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
         :root {
-            --primary: #4f46e5;
-            --background: #f9fafb;
-            --surface: #ffffff;
-            --text-strong: #111827;
-            --text-muted: #6b7280;
-            --border: #e5e7eb;
+            --primary: #6750A4; /* M3 Primary Indigo */
+            --background: #FEF7FF;
+            --surface: #FFFFFF;
+            --surface-variant: #E7E0EC;
+            --on-surface: #1D1B20;
+            --on-surface-variant: #49454F;
+            --outline: #79747E;
             --green: #10b981;
             --red: #ef4444;
         }
 
         [data-theme="dark"] {
-            --background: #0f172a;
-            --surface: #1e293b;
-            --text-strong: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
+            --primary: #D0BCFF;
+            --background: #141218;
+            --surface: #1C1B1F;
+            --surface-variant: #49454F;
+            --on-surface: #E6E1E5;
+            --outline: #938F99;
         }
 
         html, body, [class*="css"] {
@@ -37,65 +39,61 @@ def setup_theme():
 
         .stApp {
             background-color: var(--background) !important;
+            color: var(--on-surface) !important;
         }
 
-        /* Metrics Card */
-        .metric-card {
+        /* Material 3 Card (Elevation 1) */
+        [data-testid="stMetricContainer"], .metric-card, .bi-hero, .hub-card {
             background: var(--surface) !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 12px !important;
+            border: 1px solid var(--surface-variant) !important;
+            border-radius: 28px !important; /* M3 Large rounded corners */
             padding: 1.5rem !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 1rem !important;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 1px 3px 1px rgba(0, 0, 0, 0.15), 0 1px 2px 0 rgba(0, 0, 0, 0.3) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
-        .metric-card:hover {
-            transform: translateY(-2px);
-            border-color: var(--primary) !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
-        }
-        .metric-icon {
-            background: rgba(79, 70, 229, 0.08) !important;
-            color: var(--primary) !important;
-            width: 44px !important;
-            height: 44px !important;
-            border-radius: 10px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            font-size: 1.2rem !important;
-        }
-        .metric-label {
-            font-size: 0.75rem !important;
-            font-weight: 600 !important;
-            color: var(--text-muted) !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.025em !important;
-            margin: 0 !important;
-        }
-        .metric-value {
-            font-size: 1.5rem !important;
-            font-weight: 700 !important;
-            color: var(--text-strong) !important;
-            margin: 0 !important;
-            letter-spacing: -0.025em !important;
-        }
-        .metric-delta {
-            font-size: 0.75rem !important;
-            font-weight: 600 !important;
-            margin-top: 2px !important;
-        }
-        .delta-up { color: var(--green) !important; }
-        .delta-down { color: var(--red) !important; }
 
-        /* Sidebar and Layout */
-        [data-testid="stSidebar"] {
-            background-color: var(--surface) !important;
-            border-right: 1px solid var(--border) !important;
+        [data-testid="stMetricContainer"]:hover, .metric-card:hover {
+            box-shadow: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
+            transform: translateY(-2px);
+        }
+
+        [data-testid="stMetricLabel"] {
+            font-size: 0.875rem !important;
+            font-weight: 500 !important;
+            color: var(--on-surface-variant) !important;
+            text-transform: none !important;
+            letter-spacing: 0.1px !important;
+        }
+
+        [data-testid="stMetricValue"] {
+            font-size: 2.2rem !important;
+            font-weight: 400 !important; /* M3 characteristic */
+            color: var(--on-surface) !important;
+            letter-spacing: -0.02em !important;
+        }
+
+        /* Pills and Rounded Buttons (M3 Filled) */
+        .stButton > button {
+            border-radius: 100px !important; /* Pill shape */
+            font-weight: 500 !important;
+            letter-spacing: 0.1px !important;
+            padding: 0.5rem 1.75rem !important;
+            border: none !important;
+            background-color: var(--primary) !important;
+            color: white !important;
+            box-shadow: none !important;
         }
         
+        .stButton > button:hover {
+            box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15) !important;
+            opacity: 0.92;
+        }
+
+        [data-testid="stSidebar"] {
+            background-color: var(--surface) !important;
+            border-right: 1px solid var(--surface-variant) !important;
+        }
+
         .main .block-container {
             padding-top: 2rem !important;
             padding-bottom: 5rem !important;
@@ -104,10 +102,22 @@ def setup_theme():
         /* Hero and Headers */
         .bi-hero {
             background: var(--surface) !important;
-            border: 1px solid var(--border) !important;
-            border-radius: 12px !important;
-            padding: 24px !important;
+            border-radius: 28px !important;
+            padding: 2rem !important;
             margin-bottom: 24px !important;
+        }
+
+        /* Tabs (M3 Primary) */
+        div[data-testid="stTab"] button {
+            font-size: 0.875rem !important;
+            font-weight: 500 !important;
+            border-radius: 100px !important;
+            padding: 0.5rem 1rem !important;
+        }
+        
+        div[data-testid="stTab"] button[aria-selected="true"] {
+            background-color: var(--surface-variant) !important;
+            color: var(--primary) !important;
         }
 
         /* Live indicator */

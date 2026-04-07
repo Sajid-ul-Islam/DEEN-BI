@@ -43,42 +43,52 @@ def _clear_error_logs():
 def _render_workspace_sidebar():
     with st.sidebar:
         ui.sidebar_branding()
+        
+        # 1. Timeline Control
+        st.session_state.time_window = st.select_slider(
+            "Time Window",
+            options=["Last Day", "Last 7 Days", "Last Month", "Last Quarter", "Last Year"],
+            value="Last 7 Days"
+        )
 
-        st.caption("Active multi-workspace node connected to WooCommerce REST API. Navigation is managed via top-level context tabs.")
+        st.divider()
 
-        with st.expander("🛠️ System Control", expanded=False):
-            if st.button("Save Session State", use_container_width=True):
-                save_state()
-                st.success("Session state saved.")
+        # 2. Dashboard Sub-Navigation
+        st.session_state.active_section = st.radio(
+            "Intelligence Navigation",
+            [
+                "💎 Executive Dashboard",
+                "👥 Customer Behavior",
+                "🔍 Deep-Dive Clusters",
+                "📦 Inventory Health",
+                "🛡️ Data Trust"
+            ],
+            index=0
+        )
 
-            st.divider()
-            registered = st.session_state.get("registered_resets", {})
-            if registered:
-                tool_to_wipe = st.selectbox("Select tool to reset", list(registered.keys()))
-                if st.button("Reset Tool Now", use_container_width=True, type="secondary"):
-                    registered[tool_to_wipe]["fn"]()
-                    st.session_state.confirm_tool_reset = False
-                    st.success("Selected tool state was reset.")
-                    st.rerun()
+        st.divider()
 
-            st.divider()
-            if st.button("Full System Reset", use_container_width=True, type="secondary"):
-                st.session_state.confirm_app_reset = True
+        # 2. Global Sync Trigger
+        if st.button("🔄 Sync Operations", type="primary", use_container_width=True):
+            st.session_state["global_sync_request"] = True
+            st.rerun()
 
-            if st.session_state.get("confirm_app_reset"):
-                st.warning("This clears saved session state and all active tool data for this app session.")
-                c1, c2 = st.columns(2)
-                if c1.button("Yes", type="primary", use_container_width=True):
-                    from FrontEnd.utils.state import STATE_FILE
+        # 3. Status Indicator
+        st.markdown("""
+            <div style="background:rgba(16, 185, 129, 0.1); border-radius:12px; padding:12px; margin-top:16px;">
+                <div style="font-size:0.75rem; color:var(--green); font-weight:700;">LIVE SYSTEM STATUS</div>
+                <div style="font-size:0.85rem; color:var(--on-surface);">Connected to WooCommerce</div>
+            </div>
+        """, unsafe_allow_html=True)
 
-                    if os.path.exists(STATE_FILE):
-                        os.remove(STATE_FILE)
-                    st.session_state.clear()
-                    st.rerun()
-                if c2.button("No", use_container_width=True):
-                    st.session_state.confirm_app_reset = False
-                    st.rerun()
-
+        # 4. Compact Utils
+        with st.expander("🛠️ System Utils", expanded=False):
+            if st.button("Full System Reset", use_container_width=True):
+                from FrontEnd.utils.state import STATE_FILE
+                if os.path.exists(STATE_FILE): os.remove(STATE_FILE)
+                st.session_state.clear()
+                st.rerun()
+            
             _render_system_logs()
 
 
@@ -100,13 +110,8 @@ def _render_system_logs():
 
 
 def _render_primary_navigation():
-    from FrontEnd.pages import get_primary_pages
-
-    pages = get_primary_pages()
-    nav_tabs = st.tabs(PRIMARY_NAV)
-    for tab, page in zip(nav_tabs, pages):
-        with tab:
-            page.render()
+    from FrontEnd.pages.dashboard import render_intelligence_hub_page
+    render_intelligence_hub_page()
 
 
 def run_app():
