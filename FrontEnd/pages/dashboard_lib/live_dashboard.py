@@ -10,6 +10,11 @@ from typing import Tuple, Dict, Any, Optional
 from BackEnd.services.hybrid_data_loader import load_hybrid_data
 from FrontEnd.utils.error_handler import log_error
 from FrontEnd.components import ui
+import sys
+# Ensure app_modules is discoverable if root isn't in path
+if os.path.dirname(os.path.dirname(os.path.dirname(__file__))) not in sys.path:
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from app_modules.sales_dashboard import render_operational_forecast, render_category_intelligence
 
 def _reset_live_state():
     """Clears all live-session state as specified in architecture."""
@@ -485,6 +490,17 @@ def render_live_tab():
         
         # 1. TOP-LEVEL KPIs
         render_dashboard_output(results)
+        
+        # 1.1 Predictive Projections (ML)
+        st.divider()
+        forecast_source = st.session_state.get("dashboard_data", {}).get("sales_exec", df_raw)
+        
+        c1, c2 = st.columns([1, 1.2])
+        with c1:
+            render_category_intelligence(df_raw)
+        with c2:
+            render_operational_forecast(forecast_source)
+        st.divider()
         
         # 2. UNIFIED OPERATIONS LEDGER
         st.markdown("<br>", unsafe_allow_html=True)

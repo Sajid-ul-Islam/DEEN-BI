@@ -1,4 +1,5 @@
 import os
+import datetime
 
 import streamlit as st
 
@@ -66,7 +67,6 @@ def _render_workspace_sidebar():
         )
         
         if st.session_state.get("time_window") == "Custom Date Range":
-            import datetime
             st.date_input(
                 "Select Date Range",
                 value=(datetime.date.today() - datetime.timedelta(days=7), datetime.date.today()),
@@ -90,6 +90,7 @@ def _render_workspace_sidebar():
             ],
             index=0
         )
+        st.markdown("[🔗 Open OPS BI Terminal](https://deen-ops.streamlit.app/)")
 
         st.divider()
 

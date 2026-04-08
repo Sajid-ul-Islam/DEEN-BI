@@ -169,13 +169,17 @@ def render_market_overview_timeseries(df_sales: pd.DataFrame):
 def render_ml_forecast_charts(daily: pd.DataFrame):
     st.markdown("#### 🤖 Predictive Market Forecasting Ensembles")
     
+    # 1. Check for forecasting dependencies once
     try:
         from BackEnd.services.ts_forecast import generate_forecasts
-    except ImportError as e:
-        st.warning(f"Time-series forecasting module not loaded: {e}")
+        # Pre-flight check with a dummy call or just import check
+        import statsmodels
+        import sklearn
+    except (ImportError, ModuleNotFoundError):
+        st.info("💡 **Predictive Insights Paused**: The advanced ML ensemble engine (Statsmodels/Scikit-Learn) is currently not installed. The dashboard is running in standard BI mode without rolling forecasts.")
         return
     except Exception as e:
-        st.error(f"Error initializing forecasting module: {e}")
+        st.warning(f"Forecasting unavailable: {e}")
         return
         
     metrics_to_forecast = {
@@ -210,7 +214,7 @@ def render_ml_forecast_charts(daily: pd.DataFrame):
                 res = generate_forecasts(daily, metric=metric_key, horizon=7)
                 
             if "error" in res:
-                st.info(f"⚠️ {metric_title} Forecast: {res['error']}")
+                # Error is now handled at top level, but if a specific metric still has an error (e.g. data points)
                 continue
                 
             y = res["history"]
