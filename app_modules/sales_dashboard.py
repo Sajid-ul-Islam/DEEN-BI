@@ -69,8 +69,16 @@ def render_category_intelligence(df_sales: pd.DataFrame):
     """
     st.markdown("#### 📂 Category Strategy Distribution")
     
+    # Safety Check: Inherit expert rules if column missing (e.g. from cache)
+    if "Category" not in df_sales.columns:
+        from BackEnd.utils.category_rules import apply_category_expert_rules
+        # Use semantic mapping to find item name
+        name_col = "item_name" if "item_name" in df_sales.columns else "Product Name"
+        if name_col in df_sales.columns:
+            df_sales = apply_category_expert_rules(df_sales, name_col=name_col)
+    
     if df_sales.empty or "Category" not in df_sales.columns:
-        st.info("Category data unavailable for this selection.")
+        st.info("Category data unavailable for this selection. Ensure 'Product Name' or 'item_name' exists.")
         return
 
     # Aggregate by category and sort for impact

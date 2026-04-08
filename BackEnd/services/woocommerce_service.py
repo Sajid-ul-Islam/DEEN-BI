@@ -282,6 +282,31 @@ class WooCommerceService:
             
         return pd.DataFrame(all_products)
 
+    def get_registered_customer_count(self) -> int:
+        """Fetch total count of registered customers using headers (efficient)."""
+        if not self.wcapi:
+            return 0
+        try:
+            # We only need 1 per_page to get the headers
+            response = self.wcapi.get("customers", params={"per_page": 1})
+            if response.status_code == 200:
+                return int(response.headers.get('x-wp-total', 0))
+            return 0
+        except Exception:
+            return 0
+
+    def fetch_registered_customers(self, page: int = 1, per_page: int = 100) -> List[Dict[str, Any]]:
+        """Fetch registered customer profiles."""
+        if not self.wcapi:
+            return []
+        try:
+            response = self.wcapi.get("customers", params={"page": page, "per_page": per_page})
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except Exception:
+            return []
+
     def query_stock_assistant(self, question: str, stock_df: pd.DataFrame) -> str:
         """Send question + stock data context to AI and return answer using OpenAI."""
         import openai

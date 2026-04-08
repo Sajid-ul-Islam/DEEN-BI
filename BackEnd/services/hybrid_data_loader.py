@@ -609,6 +609,18 @@ def load_woocommerce_stock_data() -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=43200)
+def load_woocommerce_customer_count() -> int:
+    """Fetch total count of registered store customers (12h cache)."""
+    try:
+        from BackEnd.services.woocommerce_service import WooCommerceService
+        wc = WooCommerceService(ui_enabled=False)
+        return wc.get_registered_customer_count()
+    except Exception as exc:
+        log_error(exc, context="Hybrid Loader - Customer Count")
+        return 0
+
+
 @st.cache_data(ttl=3600)
 def load_historical_data() -> pd.DataFrame:
     data_dir = DATA_FILE.parent

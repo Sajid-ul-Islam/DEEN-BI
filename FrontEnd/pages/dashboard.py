@@ -121,6 +121,9 @@ def render_intelligence_hub_page():
     df_customers = generate_customer_insights_from_sales(df_sales_exec, include_rfm=True)
     ml_bundle = build_ml_insight_bundle(df_sales_exec, df_customers, horizon_days=7)
     stock_df = load_cached_woocommerce_stock_data()
+        # Fetch Registered Customer Stats
+    from BackEnd.services.hybrid_data_loader import load_woocommerce_customer_count
+    customer_count = load_woocommerce_customer_count()
     
     st.session_state.dashboard_data = {
         "sales": df_sales_raw,        # Operational logic needs RAW (processing/pending)
@@ -128,6 +131,7 @@ def render_intelligence_hub_page():
         "prev_sales": df_prev_raw,
         "prev_exec": df_prev_exec,
         "customers": df_customers,
+        "customer_count": customer_count,
         "ml": ml_bundle,
         "stock": stock_df,
         "summary": {"woocommerce_live": len(df_sales_raw), "stock_rows": len(stock_df)},
@@ -159,6 +163,14 @@ def render_intelligence_hub_page():
     prev_aov_val = (prev_rev_val / prev_orders_val) if prev_orders_val else 0
     prev_cust_val = df_prev_exec["customer_key"].nunique() if not df_prev_exec.empty else 0
     prev_avg_orders_val = (prev_orders_val / days_back) if days_back else 0
+    
+    # Registered vs. Guest identification
+    # Based on architecture: reg_ prefix in customer_id marks registered users in Insights
+    df_insight = data["customers"]
+    is_reg = df_insight["customer_id"].str.startswith("reg_", na=False)
+    reg_val = df_insight[is_reg]["total_revenue"].sum()
+    guest_val = df_insight[~is_reg]["total_revenue"].sum()
+    reg_pct = (reg_val / total_rev * 100) if total_rev else 0
 
     def calc_delta(curr, prev):
         if not prev: return "", 0
@@ -201,7 +213,7 @@ def render_intelligence_hub_page():
     
     elif selection == "👥 Customer Behavior":
         st.subheader("Customer Intelligence")
-        render_customer_insight_tab()
+        render_customer_insight_tab(reg_val, guest_val, data["customer_count"])
         
     elif selection == "🔍 Deep-Dive Clusters":
         render_deep_dive_tab(data["sales"], data["stock"])
@@ -218,7 +230,7 @@ def render_intelligence_hub_page():
 
 # --- MERGED COMPONENT LOGIC ---
 
-def render_customer_insight_tab():
+def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts: int):
     """Merged Customer Intelligence Component."""
     if "dashboard_data" not in st.session_state:
         st.info("Please sync data to view customer intelligence.")
@@ -230,7 +242,7 @@ def render_customer_insight_tab():
         return
 
     # Visual Segments
-    t1, t2, t3 = st.tabs(["📊 Value Segments", "🎯 Priority Outreach", "🔍 Identity Ledger"])
+    t1, t2, t3, t4 = st.tabs(["📊 Value Segments", "🎯 Priority Outreach", "🔐 Account Registrations", "🔍 Identity Ledger"])
     
     with t1:
         # Segment Mix
@@ -266,6 +278,37 @@ def render_customer_insight_tab():
         )
 
     with t3:
+        st.markdown("#### 🔐 Account Holder Intelligence")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Lifetime User Accounts", f"{total_accounts:,}")
+        
+        reg_pct = (reg_rev / (reg_rev + guest_rev) * 100) if (reg_rev + guest_rev) > 0 else 0
+        m2.metric("Registered Revenue Share", f"{reg_pct:.1f}%")
+        
+        is_reg = df["customer_id"].str.startswith("reg_", na=False)
+        reg_aov = df[is_reg]["avg_order_value"].mean()
+        gst_aov = df[~is_reg]["avg_order_value"].mean()
+        gap = ((reg_aov - gst_aov) / gst_aov * 100) if gst_aov > 0 else 0
+        m3.metric("Member vs. Guest AOV", f"{gap:+.1f}% Gap", help="Registered members usually spend significantly more per order.")
+        
+        st.divider()
+        c5, c6 = st.columns(2)
+        with c5:
+            # Registration Mix logic
+            mix_df = pd.DataFrame({
+                "Type": ["Registered Account", "Guest Checkout"],
+                "Revenue": [reg_rev, guest_rev]
+            })
+            st.plotly_chart(ui.donut_chart(mix_df, values="Revenue", names="Type", title="Sales by Enrollment Type"), use_container_width=True)
+        with c6:
+            # AOV Comparison logic
+            aov_df = pd.DataFrame({
+                "Account Type": ["Registered", "Guest"],
+                "AOV": [reg_aov, gst_aov]
+            })
+            st.plotly_chart(ui.bar_chart(aov_df, x="AOV", y="Account Type", title="Average Order Value Comparison"), use_container_width=True)
+
+    with t4:
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 

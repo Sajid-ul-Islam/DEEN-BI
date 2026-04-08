@@ -45,35 +45,42 @@ def setup_theme():
             color: var(--on-surface) !important;
         }
 
-        /* Material 3 Card (Elevation 1) */
+        /* Premium Metric Styling - Material 3 + Glassmorphism */
         [data-testid="stMetricContainer"], .metric-card, .bi-hero, .hub-card {
             background: var(--surface) !important;
             border: 1px solid var(--surface-variant) !important;
-            border-radius: 28px !important; /* M3 Large rounded corners */
+            border-radius: 16px !important; 
             padding: 1.5rem !important;
-            box-shadow: 0 1px 3px 1px rgba(0, 0, 0, 0.15), 0 1px 2px 0 rgba(0, 0, 0, 0.3) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+            border: 1px solid rgba(128, 128, 128, 0.1) !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
         [data-testid="stMetricContainer"]:hover, .metric-card:hover {
-            box-shadow: 0 4px 8px 3px rgba(0, 0, 0, 0.15), 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
-            transform: translateY(-2px);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.12) !important;
+            border-color: var(--primary) !important;
         }
 
         [data-testid="stMetricLabel"] {
-            font-size: 0.875rem !important;
-            font-weight: 500 !important;
+            font-weight: 600 !important;
+            font-size: 0.95rem !important;
+            opacity: 0.8;
             color: var(--on-surface-variant) !important;
-            text-transform: none !important;
-            letter-spacing: 0.1px !important;
+            letter-spacing: 0.05em !important;
+            text-transform: uppercase !important;
         }
 
-        [data-testid="stMetricValue"] {
-            font-size: 2.2rem !important;
-            font-weight: 400 !important; /* M3 characteristic */
+        [data-testid="stMetricValue"], 
+        [data-testid="stMetricValue"] > div {
+            font-weight: 800 !important;
+            font-size: 1.8rem !important;
             color: var(--on-surface) !important;
-            letter-spacing: -0.02em !important;
+            white-space: nowrap !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
         }
+
 
         /* Pills and Rounded Buttons (M3 Filled) */
         .stButton > button {

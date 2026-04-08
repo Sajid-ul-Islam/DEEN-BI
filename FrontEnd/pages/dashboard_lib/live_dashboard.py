@@ -408,7 +408,13 @@ def render_dashboard_output(data_bundle: Dict[str, Any]):
 def render_live_tab():
     """Main terminal logic for the Live Dashboard."""
     
-    # 1. Header & Branding Section
+    # Mode selection in sidebar for inheritance
+    with st.sidebar:
+        st.divider()
+        st.markdown("### 🛠️ Terminal Configuration")
+        mode = st.radio("Terminal Mode", ["📡 Live Stream (WC)", "📁 Manual Assessment"], key="live_terminal_mode")
+    
+    # 1. Header & Branding Section (Shared)
     logo_src = "https://logo.clearbit.com/deencommerce.com"
     try:
         logo_path = os.path.join("assets", "deen_logo.jpg")
@@ -472,75 +478,104 @@ def render_live_tab():
 
     # 4. Logic Execution
     try:
-        # Resolve DataFrame based on mode (Logic is handled inside process_data)
-        df_raw, source, updated = load_live_source()
-        
-        # Mapping & Processing
-        mapping = find_columns(df_raw)
-        
-        # Validation
-        required = ["name", "cost", "qty"]
-        missing = [m for m in required if m not in mapping]
-        if missing:
-            st.error(f"Mapping Failure: Missing {', '.join(missing)}")
-            st.info("The live data source schema has changed. Please contact system admin.")
-            return
-
-        results = process_data(df_raw, mapping, is_historical=False)
-        
-        # 1. TOP-LEVEL KPIs
-        render_dashboard_output(results)
-        
-        # 1.1 Predictive Projections (ML)
-        st.divider()
-        forecast_source = st.session_state.get("dashboard_data", {}).get("sales_exec", df_raw)
-        
-        c1, c2 = st.columns([1, 1.2])
-        with c1:
-            render_category_intelligence(df_raw)
-        with c2:
-            render_operational_forecast(forecast_source)
-        st.divider()
-        
-        # 2. UNIFIED OPERATIONS LEDGER
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Section A: Today's Active Shift
-        st.markdown("### 🚀 Today's Active Shift Ledger")
-        st.dataframe(results["drill"][["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
-                     use_container_width=True, hide_index=True)
-        
-        # Section B: Pending & Backlog Queue
-        is_hold = df_raw["order_status"].str.lower().isin(["on-hold", "onhold"])
-        is_waiting = df_raw["order_status"].str.lower().isin(["pending", "waiting"])
-        cutoff_time = datetime.now().replace(hour=17, minute=30, second=0, microsecond=0)
-        
-        if datetime.now() > cutoff_time:
-            is_proc = df_raw["order_status"].str.lower() == "processing"
-            df_pb = df_raw[is_hold | is_waiting | is_proc].copy()
+        if mode == "📁 Manual Assessment":
+            st.info("💡 **Manual Mode**: Drag-and-drop a CSV or Excel file to generate an instant operational analysis.")
+            uploaded = st.file_uploader("Upload Daily Sales Log", type=["xlsx", "csv"])
+            if uploaded:
+                df_raw = pd.read_csv(uploaded) if uploaded.name.endswith(".csv") else pd.read_excel(uploaded)
+                
+                # Use resolve_column for smart mapping (inheritance)
+                from BackEnd.utils.sales_schema import ensure_sales_schema, CANONICAL_ALIASES
+                df_raw = ensure_sales_schema(df_raw)
+                
+                # Check for mandatory e-commerce columns
+                missing = [c for c in ["item_name", "order_total", "qty"] if c not in df_raw.columns]
+                if missing:
+                    st.error(f"Mapping Failed: Could not identify {', '.join(missing)}")
+                    st.stop()
+                
+                # Mapping compatibility for existing process_data
+                mapping = {k: k for k in CANONICAL_ALIASES}
+                results = process_data(df_raw, mapping, is_historical=False)
+                
+                st.success(f"Analyzed: {uploaded.name} | Found {len(df_raw)} records")
+                render_dashboard_output(results)
+                
+                # 1.1 Category & Metric Distribution
+                st.divider()
+                render_category_intelligence(df_raw)
+                st.divider()
+                
+                # Excel Export using Upgraded Engine
+                from FrontEnd.components.data_display import export_to_excel
+                ex_data = export_to_excel(df_raw, "Operational Analysis")
+                st.download_button("📥 Download Stylized Report", data=ex_data, file_name=f"Manual_Analysis_{datetime.now().strftime('%d%b')}.xlsx")
+            else:
+                st.stop()
         else:
-            df_pb = df_raw[is_hold | is_waiting].copy()
-        
-        with st.expander(f"📥 Hold/Waiting Ledger ({len(df_pb)} orders)", expanded=False):
-            if df_pb.empty:
-                st.success("🎉 No orders in Hold/Waiting!")
-            else:
-                st.dataframe(df_pb[["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
-                             use_container_width=True, hide_index=True)
+            # Resolve DataFrame based on mode (Logic is handled inside process_data)
+            df_raw, source, updated = load_live_source()
+            
+            # Mapping & Processing
+            mapping = find_columns(df_raw)
+            
+            # Validation
+            required = ["name", "cost", "qty"]
+            missing = [m for m in required if m not in mapping]
+            if missing:
+                st.error(f"Mapping Failure: Missing {', '.join(missing)}")
+                st.info("The live data source schema has changed. Please contact system admin.")
+                return
 
-        # Section C: Previous Shift Finalized
-        df_prev_raw = st.session_state.dashboard_data.get("prev_sales", pd.DataFrame())
-        with st.expander(f"📅 Previous Shift Finalized Ledger", expanded=False):
-            if df_prev_raw.empty:
-                st.info("No comparative shift data in session.")
+            results = process_data(df_raw, mapping, is_historical=False)
+            
+            # 1. TOP-LEVEL KPIs
+            render_dashboard_output(results)
+            
+            # 1.1 Category & Metric Distribution
+            st.divider()
+            render_category_intelligence(df_raw)
+            st.divider()
+            
+            # 2. UNIFIED OPERATIONS LEDGER
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Section A: Today's Active Shift
+            st.markdown("### 🚀 Today's Active Shift Ledger")
+            st.dataframe(results["drill"][["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
+                         use_container_width=True, hide_index=True)
+            
+            # Section B: Pending & Backlog Queue
+            is_hold = df_raw["order_status"].str.lower().isin(["on-hold", "onhold"])
+            is_waiting = df_raw["order_status"].str.lower().isin(["pending", "waiting"])
+            cutoff_time = datetime.now().replace(hour=17, minute=30, second=0, microsecond=0)
+            
+            if datetime.now() > cutoff_time:
+                is_proc = df_raw["order_status"].str.lower() == "processing"
+                df_pb = df_raw[is_hold | is_waiting | is_proc].copy()
             else:
-                mapping_prev = find_columns(df_prev_raw)
-                if mapping_prev:
-                    res_prev = process_data(df_prev_raw, mapping_prev, is_historical=True)
-                    st.dataframe(res_prev["drill"][["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
-                                 use_container_width=True, hide_index=True)
+                df_pb = df_raw[is_hold | is_waiting].copy()
+            
+            with st.expander(f"📥 Hold/Waiting Ledger ({len(df_pb)} orders)", expanded=False):
+                if df_pb.empty:
+                    st.success("🎉 No orders in Hold/Waiting!")
                 else:
-                    st.warning("Previous schema mismatch.")
+                    st.dataframe(df_pb[["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
+                                 use_container_width=True, hide_index=True)
+
+            # Section C: Previous Shift Finalized
+            df_prev_raw = st.session_state.dashboard_data.get("prev_sales", pd.DataFrame())
+            with st.expander(f"📅 Previous Shift Finalized Ledger", expanded=False):
+                if df_prev_raw.empty:
+                    st.info("No comparative shift data in session.")
+                else:
+                    mapping_prev = find_columns(df_prev_raw)
+                    if mapping_prev:
+                        res_prev = process_data(df_prev_raw, mapping_prev, is_historical=True)
+                        st.dataframe(res_prev["drill"][["order_id", "order_date", "customer_name", "order_total", "order_status", "city"]], 
+                                     use_container_width=True, hide_index=True)
+                    else:
+                        st.warning("Previous schema mismatch.")
 
     except Exception as e:
         log_system_event("RUNTIME_ERROR", str(e))
