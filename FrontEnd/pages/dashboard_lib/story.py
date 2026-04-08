@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from .data_helpers import sum_order_level_revenue, build_order_level_dataset
 
-def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, ml_bundle: dict):
+def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, ml_bundle: dict, time_window: str = "this period"):
     if df_sales.empty:
         return
     total_revenue = sum_order_level_revenue(df_sales)
@@ -14,7 +14,16 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
     narrative = []
     if total_revenue > 0:
         avg_daily = total_revenue / days_in_window if days_in_window > 0 else total_revenue
-        narrative.append(f"In this period, your store has generated <b>TK {total_revenue:,.0f}</b> in revenue, averaging <b>TK {avg_daily:,.0f}</b> per day.")
+        
+        # Format the time prefix elegantly
+        if time_window.lower() in ["mtd", "ytd"]:
+            period_prefix = f"In {time_window}"
+        elif "last" in time_window.lower() or "yesterday" in time_window.lower():
+            period_prefix = f"Over the {time_window.lower()}"
+        else:
+            period_prefix = f"In {time_window.lower()}"
+            
+        narrative.append(f"{period_prefix}, your store has generated <b>TK {total_revenue:,.0f}</b> in revenue, averaging <b>TK {avg_daily:,.0f}</b> per day.")
     if not df_customers.empty and "segment" in df_customers.columns:
         vips = len(df_customers[df_customers["segment"] == "VIP"])
         if vips > 0:
@@ -73,7 +82,16 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
     narrative_hash = hashlib.md5(combined_narrative.encode()).hexdigest()[:8]
     typing_duration = max(8, len(combined_narrative) // 12)
 
-    # Layout for Typewriter
+    # Advanced Multi-Line Typewriter Effect (Opacity Based avoids Reflow)
+    char_delay = typing_duration / max(len(combined_narrative), 1)
+    animated_chars = []
+    for i, char in enumerate(combined_narrative):
+        if char == " ":
+            animated_chars.append(" ")
+        else:
+            animated_chars.append(f'<span style="opacity: 0; animation: revChar_{narrative_hash} 0.1s forwards; animation-delay: {i * char_delay:.3f}s;">{char}</span>')
+    animated_html = "".join(animated_chars)
+
     st.markdown(
         f"""
         <style>
@@ -86,27 +104,30 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
                 padding: 12px 18px;
                 border-radius: 4px;
                 border-left: 4px solid #F59E0B;
-                overflow-x: auto;
-                white-space: nowrap;
+                white-space: normal;
                 display: block;
                 width: 100%;
-                scrollbar-width: thin;
                 margin-bottom: 8px;
-                animation: 
-                    typing_{narrative_hash} {typing_duration}s steps({len(combined_narrative)}, end) forwards,
-                    blink-caret .75s step-end infinite;
+                line-height: 1.5;
             }}
 
             /* Light/Dark adaptive colors */
             @media (prefers-color-scheme: light) {{ .orthodox-typewriter {{ color: #000000; border-left-color: #000000; }} }}
             @media (prefers-color-scheme: dark) {{ .orthodox-typewriter {{ color: #F59E0B; border-left-color: #F59E0B; }} }}
 
-            @keyframes typing_{narrative_hash} {{ from {{ width: 0 }} to {{ width: 100% }} }}
-            @keyframes blink-caret {{ from, to {{ border-color: transparent }} 50% {{ border-color: inherit; }} }}
+            @keyframes revChar_{narrative_hash} {{
+                to {{ opacity: 1; }}
+            }}
         </style>
         <div class="orthodox-typewriter" id="story-typewriter-{narrative_hash}">
-            {combined_narrative}
+            {animated_html}<span style="animation: blinkCaret 0.75s step-end infinite;">_</span>
         </div>
+        <style>
+            @keyframes blinkCaret {{
+                0%, 100% {{ opacity: 1; }}
+                50% {{ opacity: 0; }}
+            }}
+        </style>
         """,
         unsafe_allow_html=True
     )
@@ -146,9 +167,7 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
             
             # Icons now appear in horizontal sequence after the typing delay
             with ic1:
-                if bundle_suggestions:
-                    if st.button("💎", key="btn_bundle_suggest", help="View Bundle Strategy"):
-                        st.session_state.show_bundle_suggest = not st.session_state.get("show_bundle_suggest", False)
+                pass # Bundle icon removed
             
             with ic2:
                 if not at_risk_vips.empty:
@@ -188,11 +207,3 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
                     columns={"primary_name": "Customer", "total_revenue": "Lifetime Value", "recency_days": "Days Since Last Order"}
                 ), use_container_width=True, hide_index=True)
                 st.caption("💡 Suggestion: Launch a 'We Miss You' WhatsApp campaign for these specific individuals.")
-
-            # Bundle Discovery View
-            if st.session_state.get("show_bundle_suggest") and bundle_suggestions:
-                st.markdown("---")
-                st.success(f"💎 Growth Opportunity: Intelligent Product Bundling")
-                pair = bundle_suggestions[0]
-                st.markdown(f"**Suggested Bundle:** {pair[0]} + {pair[1]}")
-                st.info("Strategy: Offering these as a single 'Essential Set' with a 5% discount can increase average transaction value without increasing marketing spend.")

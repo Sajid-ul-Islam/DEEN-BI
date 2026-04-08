@@ -172,7 +172,7 @@ def render_intelligence_hub_page():
 
     if selection == "💎 Market Overview":
         # Global Narrative & Summary
-        render_dashboard_story(data["sales_exec"], data["customers"], data["ml"])
+        render_dashboard_story(data["sales_exec"], data["customers"], data["ml"], window)
         
         st.divider()
         render_market_overview_timeseries(data["sales_exec"])
