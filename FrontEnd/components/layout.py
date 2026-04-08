@@ -685,12 +685,6 @@ def page_footer():
         f"""
         <div class="hub-page_footer">
             <div style="width:100%; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;">
-                <div style="display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px;">
-                    <span style="color:var(--on-surface-variant); font-size:0.85rem; opacity:0.8;">© 2026</span>
-                    <a href="https://github.com/saajiidi" target="_blank" style="color:var(--primary); font-size:0.85rem; text-decoration:none; font-weight:600;">Sajid Islam</a>
-                    <span style="color:var(--outline); opacity:0.3; margin:0 4px;">|</span>
-                    <span style="color:var(--on-surface-variant); font-size:0.85rem; opacity:0.8;">v9.8 Vision Pro</span>
-                </div>
                 <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
                     <a href="https://deencommerce.com/" target="_blank" style="color:var(--on-surface); text-decoration:none; display:flex; align-items:center; gap:8px;">
                         <img src="{logo_src}" width="18" height="18" style="border-radius:4px;" onerror="this.style.display='none'">

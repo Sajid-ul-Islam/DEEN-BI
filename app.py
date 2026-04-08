@@ -50,6 +50,15 @@ def _render_workspace_sidebar():
         if "time_window" not in st.session_state:
             st.session_state.time_window = "Last 7 Days"
 
+        st.markdown('<div class="sidebar-group-label">⚡ Performance Control</div>', unsafe_allow_html=True)
+        st.segmented_control(
+            "Connection Tuning",
+            options=["High Speed", "Slow Connection"],
+            default="High Speed",
+            key="conn_speed_mode",
+            label_visibility="collapsed"
+        )
+
         st.markdown('<div class="sidebar-group-label">⏱️ Operational Range</div>', unsafe_allow_html=True)
         st.select_slider(
             "Time Window",
@@ -67,6 +76,8 @@ def _render_workspace_sidebar():
         is_after_cutoff = now >= shift_cutoff
         
         shift_label = "Night Shift (Post-Cutoff)" if is_after_cutoff else "Day Shift (Processing)"
+        st.markdown(f'<div style="font-size:0.75rem; color:var(--on-surface-variant); opacity:0.8; margin-top:-10px; margin-bottom:15px; padding-left:4px;">🔄 Current: <b>{shift_label}</b></div>', unsafe_allow_html=True)
+        
         cycle_start = shift_cutoff if is_after_cutoff else (shift_cutoff - timedelta(days=1))
         
         if st.session_state.get("time_window") == "Custom Date Range":
@@ -139,8 +150,23 @@ def _render_workspace_sidebar():
         # Update formal state
         st.session_state.active_section = nav_map[selection]
 
-        st.markdown(f'<div style="font-size:0.75rem; opacity:0.6; padding-left:4px; margin-top:8px;">Operational Cell: <b>Active</b></div>', unsafe_allow_html=True)
-        st.markdown("[🔗 Open OPS BI Terminal](https://deen-ops.streamlit.app/)")
+        st.markdown('<div class="sidebar-group-label">⚙️ Workspace Status</div>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="heartbeat-card">
+                <div class="pulse-text">
+                    <span class="heartbeat-dot"></span>
+                    Operational Cell: Active
+                </div>
+                <div style="margin-top: 10px;">
+                    <a href="https://deen-ops.streamlit.app/" target="_blank" style="text-decoration: none; color: var(--primary); font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                        🔗 <span>DEEN OPS Terminal</span>
+                    </a>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         st.divider()
 

@@ -10,8 +10,14 @@ duckdb>=1.5.1
 anthropic>=0.89.0
 openpyxl>=3.1.5
 xlsxwriter>=3.2.9
-scikit-learn
-statsmodels
+# Core Data & ML
+scikit-learn>=1.6.0
+statsmodels>=0.14.0
+scipy>=1.15.0
+joblib>=1.4.0
+patsy>=1.0.0
+
+# UI & Interaction
 streamlit-elements>=0.1.0
 streamlit-autorefresh>=1.0.1
 woocommerce>=3.0.0

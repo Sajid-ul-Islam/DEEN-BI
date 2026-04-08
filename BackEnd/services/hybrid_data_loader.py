@@ -25,6 +25,7 @@ WOO_CACHE_TTL_MINUTES = 360
 STOCK_CACHE_TTL_MINUTES = 20
 REFRESH_LOCK_TTL_MINUTES = 90
 FULL_HISTORY_SYNC_DAYS = 36500
+STATIC_SNAPSHOT_DIR = Path(__file__).parent.parent.parent / "data" / "static_snapshot"
 
 
 def _local_user_slug() -> str:
@@ -295,7 +296,35 @@ def load_cached_woocommerce_live_data(
 
 
 def load_cached_woocommerce_stock_data() -> pd.DataFrame:
+    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT
+    if USE_STATIC_SNAPSHOT:
+        snapshot_file = STATIC_SNAPSHOT_DIR / "stock.parquet"
+        if snapshot_file.exists():
+            return _read_parquet(snapshot_file)
     return _read_parquet(_cache_file("woo_stock.parquet"))
+
+
+def load_woocommerce_customer_count() -> int:
+    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT
+    if USE_STATIC_SNAPSHOT:
+        meta = _read_json(STATIC_SNAPSHOT_DIR / "metadata.json")
+        return meta.get("customer_count", 0)
+    
+    meta = _read_json(_cache_file("woo_orders_meta.json"))
+    return meta.get("total_customer_count", 0)
+
+
+def load_static_ml_bundle() -> dict:
+    """Loads pre-calculated ML insights from the snapshot."""
+    import pickle
+    bundle_file = STATIC_SNAPSHOT_DIR / "ml_bundle.pkl"
+    if bundle_file.exists():
+        try:
+            with open(bundle_file, "rb") as f:
+                return pickle.load(f)
+        except Exception:
+            pass
+    return {}
 
 
 def load_cached_woocommerce_history() -> pd.DataFrame:
@@ -664,7 +693,17 @@ def load_hybrid_data(
     end_date: Optional[str] = None,
     include_woocommerce: bool = True,
     woocommerce_mode: str = "live",
+    use_snapshot: bool = False,
 ) -> pd.DataFrame:
+    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT
+    force_off = os.getenv("USE_STATIC_SNAPSHOT_FORCE_OFF", "False") == "True"
+    
+    if (USE_STATIC_SNAPSHOT or use_snapshot) and not force_off:
+        snapshot_file = STATIC_SNAPSHOT_DIR / "sales.parquet"
+        if snapshot_file.exists():
+            df_static = _read_parquet(snapshot_file)
+            return ensure_sales_schema(df_static)
+
     if not include_woocommerce:
         return pd.DataFrame()
 
@@ -690,6 +729,16 @@ def load_hybrid_data(
 
 
 def get_data_summary(woocommerce_mode: str = "live") -> dict:
+    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT
+    if USE_STATIC_SNAPSHOT:
+        df_woo = load_hybrid_data()
+        df_stock = load_cached_woocommerce_stock_data()
+        return {
+            "woocommerce_live": len(df_woo),
+            "stock_rows": len(df_stock),
+            "total": len(df_woo),
+        }
+
     df_woo = (
         load_cached_woocommerce_live_data()
         if woocommerce_mode == "cache_only"

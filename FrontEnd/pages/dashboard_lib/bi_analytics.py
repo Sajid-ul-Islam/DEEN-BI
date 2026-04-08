@@ -100,7 +100,7 @@ def render_last_7_days_sales_chart(df_sales: pd.DataFrame, df_customers: pd.Data
         st.plotly_chart(px.bar(daily, x="day_label", y="revenue", color="revenue", title="Last 7 Days Revenue", text_auto=".2s", color_continuous_scale="Tealgrn").update_layout(height=340), use_container_width=True)
     with c2:
         st.plotly_chart(px.line(daily.melt(id_vars=["day_label"], value_vars=["orders", "unique_customers", "new_customers"], var_name="metric", value_name="value"), x="day_label", y="value", color="metric", markers=True, title="Last 7 Days Orders and Customers").update_layout(height=340), use_container_width=True)
-def render_market_overview_timeseries(df_sales: pd.DataFrame):
+def render_market_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = None):
     """Renders high-fidelity time-series analysis for Market Overview."""
     st.markdown("#### 📈 Time-Series Performance Analysis")
     sales = ensure_sales_schema(df_sales).copy()
@@ -164,23 +164,29 @@ def render_market_overview_timeseries(df_sales: pd.DataFrame):
         st.plotly_chart(fig_aov, use_container_width=True)
 
     st.divider()
-    render_ml_forecast_charts(daily)
+    render_ml_forecast_charts(daily, ml_bundle=ml_bundle)
 
-def render_ml_forecast_charts(daily: pd.DataFrame):
+def render_ml_forecast_charts(daily: pd.DataFrame, ml_bundle: dict = None):
     st.markdown("#### 🤖 Predictive Market Forecasting Ensembles")
     
-    # 1. Check for forecasting dependencies once
-    try:
-        from BackEnd.services.ts_forecast import generate_forecasts
-        # Pre-flight check with a dummy call or just import check
-        import statsmodels
-        import sklearn
-    except (ImportError, ModuleNotFoundError):
-        st.info("💡 **Predictive Insights Paused**: The advanced ML ensemble engine (Statsmodels/Scikit-Learn) is currently not installed. The dashboard is running in standard BI mode without rolling forecasts.")
-        return
-    except Exception as e:
-        st.warning(f"Forecasting unavailable: {e}")
-        return
+    # Check if we already have pre-calculated forecasts in the bundle (Snapshot Mode)
+    use_precalculated = False
+    if ml_bundle and "forecasts" in ml_bundle:
+        use_precalculated = True
+    
+    # If not pre-calculated, check for forecasting dependencies for live training
+    if not use_precalculated:
+        try:
+            from BackEnd.services.ts_forecast import generate_forecasts
+            # Pre-flight check
+            import statsmodels
+            import sklearn
+        except (ImportError, ModuleNotFoundError):
+            st.info("💡 **Predictive Insights Paused**: The advanced ML ensemble engine is currently not installed. The dashboard is running in standard BI mode without rolling forecasts.")
+            return
+        except Exception as e:
+            st.warning(f"Forecasting unavailable: {e}")
+            return
         
     metrics_to_forecast = {
         "revenue": "Revenue (TK)",
@@ -210,10 +216,13 @@ def render_ml_forecast_charts(daily: pd.DataFrame):
 
     for i, (metric_key, metric_title) in enumerate(metrics_to_forecast.items()):
         with cols[i]:
-            with st.spinner(f"Training ensembles for {metric_title}..."):
-                res = generate_forecasts(daily, metric=metric_key, horizon=7)
+            if use_precalculated and metric_key in ml_bundle["forecasts"]:
+                res = ml_bundle["forecasts"][metric_key]
+            else:
+                with st.spinner(f"Training ensembles for {metric_title}..."):
+                    res = generate_forecasts(daily, metric=metric_key, horizon=7)
                 
-            if "error" in res:
+            if "error" in res or not res:
                 # Error is now handled at top level, but if a specific metric still has an error (e.g. data points)
                 continue
                 

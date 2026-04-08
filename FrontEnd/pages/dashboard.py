@@ -109,21 +109,50 @@ def render_intelligence_hub_page():
     needs_history = window == "Custom Date Range" and not orders_status.get("is_covered", True)
     if needs_history:
         st.warning(f"⏳ Connecting to WooCommerce Live to sync deep archival history ({start_date_str} to {end_date_str}). This runs seamlessly in the background and may take a few minutes. Your metrics will automatically populate once caching finishes!")
+    from FrontEnd.utils.config import USE_STATIC_SNAPSHOT, SNAPSHOT_DATE, SNAPSHOT_LABEL, MAP_FORCE_SNAPSHOT
+    
+    # Determine Snapshot mode based on configuration OR manual user override (Slow Connection)
+    slow_conn = st.session_state.get("conn_speed_mode") == "Slow Connection"
+    active_snapshot_mode = USE_STATIC_SNAPSHOT or slow_conn
+    
+    if active_snapshot_mode:
+        st.info(f"📶 **{SNAPSHOT_LABEL}**: Performance optimized for slow connections. Real-time syncing is paused.")
+        df_sales_raw = load_hybrid_data(woocommerce_mode="cache_only", use_snapshot=True)
+        df_sales_raw = prune_dataframe(df_sales_raw, DASHBOARD_SALES_COLUMNS)
+    else:
+        # Standard Live Logic
+        # Force a sync for current-day data requests
+        should_force = global_sync or (window == "Yesterday & Today") or needs_history
+        start_orders_background_refresh(start_date_str, end_date_str, force=should_force)
+        
+        sync_mode = "live" if (window == "Yesterday & Today" or global_sync) else "cache_only"
+        df_sales_raw = prune_dataframe(load_hybrid_data(start_date=start_date_str, end_date=end_date_str, woocommerce_mode=sync_mode), DASHBOARD_SALES_COLUMNS)
+    
+    if "Category" not in df_sales_raw.columns:
+        from BackEnd.core.categories import get_category_for_sales
+        df_sales_raw["Category"] = df_sales_raw["item_name"].apply(get_category_for_sales)
+        
+    # --- HYBRID MAP DATA: The map ALWAYS uses a clean snapshot to save memory ---
+    if MAP_FORCE_SNAPSHOT:
+        df_sales_map = load_hybrid_data(use_snapshot=True)
+        # Apply categories to map snapshot if missing
+        if "Category" not in df_sales_map.columns:
+            from BackEnd.core.categories import get_category_for_sales
+            df_sales_map["Category"] = df_sales_map["item_name"].apply(get_category_for_sales)
+    else:
+        df_sales_map = df_sales_raw
 
-    # Force a sync for current-day data requests
-    should_force = global_sync or (window == "Yesterday & Today") or needs_history
-    start_orders_background_refresh(start_date_str, end_date_str, force=should_force)
-    
-    sync_mode = "live" if (window == "Yesterday & Today" or global_sync) else "cache_only"
-    df_sales_raw = prune_dataframe(load_hybrid_data(start_date=start_date_str, end_date=end_date_str, woocommerce_mode=sync_mode), DASHBOARD_SALES_COLUMNS)
-    
-    # Apply Business Rules (Logic consistency)
-    from BackEnd.core.categories import get_category_for_sales
-    df_sales_raw["Category"] = df_sales_raw["item_name"].apply(get_category_for_sales)
+    # Fetch pre-calculated ML bundle if in snapshot mode, else build it
+    if active_snapshot_mode:
+        from BackEnd.services.hybrid_data_loader import load_static_ml_bundle
+        ml_bundle = load_static_ml_bundle()
+    else:
+        ml_bundle = None # Will be built below
     
     # Fetch Previous context (Unfiltered)
     df_prev_raw = load_hybrid_data(start_date=prev_start_date_str, end_date=prev_end_date_str, woocommerce_mode="cache_only")
     df_prev_raw = prune_dataframe(df_prev_raw, DASHBOARD_SALES_COLUMNS)
+    from BackEnd.core.categories import get_category_for_sales
     df_prev_raw["Category"] = df_prev_raw["item_name"].apply(get_category_for_sales)
 
     # SECURE ANALYTICS: Create filtered versions for high-level pillars
@@ -131,17 +160,26 @@ def render_intelligence_hub_page():
     valid_statuses = ["completed", "shipped"]
     df_sales_exec = df_sales_raw[df_sales_raw["order_status"].str.lower().isin(valid_statuses)].copy()
     df_prev_exec = df_prev_raw[df_prev_raw["order_status"].str.lower().isin(valid_statuses)].copy()
-
-    df_customers = generate_customer_insights_from_sales(df_sales_exec, include_rfm=True)
-    ml_bundle = build_ml_insight_bundle(df_sales_exec, df_customers, horizon_days=7)
+    
+    if not active_snapshot_mode:
+        df_customers = generate_customer_insights_from_sales(df_sales_exec, include_rfm=True)
+        ml_bundle = build_ml_insight_bundle(df_sales_exec, df_customers, horizon_days=7)
+    else:
+        # Snapshot mode provides these
+        if ml_bundle and "customers" in ml_bundle: # if bundle includes it
+            df_customers = ml_bundle["customers"]
+        else:
+            df_customers = generate_customer_insights_from_sales(df_sales_exec, include_rfm=True)
+    
     stock_df = load_cached_woocommerce_stock_data()
         # Fetch Registered Customer Stats
     from BackEnd.services.hybrid_data_loader import load_woocommerce_customer_count
     customer_count = load_woocommerce_customer_count()
     
     st.session_state.dashboard_data = {
-        "sales": df_sales_raw,        # Operational logic needs RAW (processing/pending)
-        "sales_exec": df_sales_exec, # High-level stats use FILTERED
+        "sales": df_sales_raw,
+        "sales_map": df_sales_map,       # Dedicated map dataset
+        "sales_exec": df_sales_exec,
         "prev_sales": df_prev_raw,
         "prev_exec": df_prev_exec,
         "customers": df_customers,
@@ -218,11 +256,12 @@ def render_intelligence_hub_page():
         # Global Narrative & Summary
         render_dashboard_story(data["sales_exec"], data["customers"], data["ml"], window)
         st.divider()
-        render_market_overview_timeseries(data["sales_exec"])
+        render_market_overview_timeseries(data["sales_exec"], ml_bundle=data["ml"])
 
         # Geospatial Intelligence Layer (Moved under ML Forecasts)
+        # Use dedicated map dataset (Always Snapshot if MAP_FORCE_SNAPSHOT enabled)
         from FrontEnd.pages.dashboard_lib.geo_viz import render_district_map
-        render_district_map(data["sales"])
+        render_district_map(data["sales_map"])
     
     elif selection == "📊 Traffic & Acquisition":
         render_acquisition_analytics(data["sales"])

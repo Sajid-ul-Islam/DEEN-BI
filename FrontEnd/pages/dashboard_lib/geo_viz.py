@@ -47,15 +47,15 @@ def render_district_map(df_sales: pd.DataFrame):
     # 1. Aggregate Data by District
     df_map = df_sales.copy()
     
-    if "order_date" not in df_map.columns:
-        st.info("Insufficient location data for geospatial mapping.")
-        return
-
     def get_district(row):
+        # Prefer 'state' then 'city' (standard WooCommerce fields mapping)
         state = str(row.get("state", "")).strip().title()
         city = str(row.get("city", "")).strip().title()
-        if state and state != "Unknown": return state
-        return city if city and city != "Unknown" else "Unknown"
+        
+        # Guard against "Unknown" or empty strings
+        if state and state not in ["Unknown", "None", "", "Nan"]: return state
+        if city and city not in ["Unknown", "None", "", "Nan"]: return city
+        return "Unknown"
 
     df_map["matched_district"] = df_map.apply(get_district, axis=1)
     df_map["matched_district"] = df_map["matched_district"].apply(normalize_district_name)
