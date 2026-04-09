@@ -106,7 +106,7 @@ def _render_workspace_sidebar():
         inv_label = f"📦 Inventory Health [{stats['low']}!] " if stats['low'] > 0 else "📦 Inventory Health"
         
         nav_map = {
-            "💎 Market Overview": "💎 Market Overview",
+            "💎 Sales Overview": "💎 Sales Overview",
             "🔍 Deep-Dive Clusters": "🔍 Deep-Dive Clusters",
             "📊 Traffic & Acquisition": "📊 Traffic & Acquisition",
             "👥 Customer Insight": "👥 Customer Insight",
@@ -116,12 +116,12 @@ def _render_workspace_sidebar():
 
         # Initialize section if not set
         if "active_section" not in st.session_state:
-            st.session_state.active_section = "💎 Market Overview"
+            st.session_state.active_section = "💎 Sales Overview"
 
         # Find the index of the active section in the labels list
         # Map values back to display labels to find the index
         reverse_map = {v: k for k, v in nav_map.items()}
-        current_label = reverse_map.get(st.session_state.active_section, "💎 Market Overview")
+        current_label = reverse_map.get(st.session_state.active_section, "💎 Sales Overview")
         
         labels = list(nav_map.keys())
         try:

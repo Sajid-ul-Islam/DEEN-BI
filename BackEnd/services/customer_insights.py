@@ -89,7 +89,13 @@ def generate_customer_insights_from_sales(
     include_favorites: bool = True,
 ) -> pd.DataFrame:
     if df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=[
+            "customer_id", "primary_name", "all_emails", "all_phones", 
+            "total_orders", "total_revenue", "avg_order_value", "first_order", 
+            "last_order", "customer_lifespan_days", "recency_days", 
+            "purchase_cycle_days", "clv", "segment", "r_score", "f_score", 
+            "m_score", "rfm_score", "rfm_avg", "favorite_product"
+        ])
 
     df = _prepare_customer_identity(df)
 

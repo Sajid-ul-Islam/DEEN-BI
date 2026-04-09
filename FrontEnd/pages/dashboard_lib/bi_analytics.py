@@ -100,8 +100,8 @@ def render_last_7_days_sales_chart(df_sales: pd.DataFrame, df_customers: pd.Data
         st.plotly_chart(px.bar(daily, x="day_label", y="revenue", color="revenue", title="Last 7 Days Revenue", text_auto=".2s", color_continuous_scale="Tealgrn").update_layout(height=340), use_container_width=True)
     with c2:
         st.plotly_chart(px.line(daily.melt(id_vars=["day_label"], value_vars=["orders", "unique_customers", "new_customers"], var_name="metric", value_name="value"), x="day_label", y="value", color="metric", markers=True, title="Last 7 Days Orders and Customers").update_layout(height=340), use_container_width=True)
-def render_market_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = None):
-    """Renders high-fidelity time-series analysis for Market Overview."""
+def render_sales_overview_timeseries(df_sales: pd.DataFrame, ml_bundle: dict = None):
+    """Renders high-fidelity time-series analysis for Sales Overview."""
     st.markdown("#### 📈 Time-Series Performance Analysis")
     sales = ensure_sales_schema(df_sales).copy()
     sales = sales[sales["order_date"].notna()].copy()

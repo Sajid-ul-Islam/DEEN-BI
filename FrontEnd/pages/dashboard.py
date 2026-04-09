@@ -23,7 +23,7 @@ from .dashboard_lib.story import render_dashboard_story
 from .dashboard_lib.bi_analytics import (
     render_today_vs_last_day_sales_chart,
     render_last_7_days_sales_chart,
-    render_market_overview_timeseries
+    render_sales_overview_timeseries
 )
 from .dashboard_lib.trends import render_sales_trends
 from .dashboard_lib.performance import render_product_performance
@@ -60,34 +60,26 @@ def render_intelligence_hub_page():
     elif window == "YTD":
         days_back = (today - today.replace(month=1, day=1)).days
     elif window == "Custom Date Range":
-        s_date = st.session_state.get("wc_sync_start_date")
-        s_time = st.session_state.get("wc_sync_start_time")
-        e_date = st.session_state.get("wc_sync_end_date")
-        e_time = st.session_state.get("wc_sync_end_time")
+        start_dt = st.session_state.get("wc_sync_start_date", today)
+        end_dt = st.session_state.get("wc_sync_end_date", today)
         
-        if s_date and s_time and e_date and e_time:
-            # Construct ISO strings with time components
-            start_date_str = f"{s_date}T{s_time.strftime('%H:%M:%S')}"
-            end_date_str = f"{e_date}T{e_time.strftime('%H:%M:%S')}"
-            
-            # For metrics calculations that need pure Dates
-            start_dt = s_date
-            end_dt = e_date
-            days_back = (end_dt - start_dt).days
-        else:
-            start_dt = end_dt = today
-            start_date_str = start_dt.strftime("%Y-%m-%d")
-            end_date_str = end_dt.strftime("%Y-%m-%d")
-            days_back = 0
+        # Calculate duration for delta comparisons
+        days_back = (end_dt - start_dt).days
+        
+        # Construct ISO strings with full-day coverage
+        start_date_str = f"{start_dt}T00:00:00"
+        end_date_str = f"{end_dt}T23:59:59"
     else:
         window_map = {
-            "Yesterday & Today": 1,
+            "Last Day": 1,
             "Last 3 Days": 3,
             "Last 7 Days": 7,
+            "Last 15 Days": 15,
             "Last Month": 30,
             "Last 3 Months": 90,
-            "Last Quarter": 120,
+            "Last Quarter": 90,
             "Last Half Year": 180,
+            "Last 9 Months": 270,
             "Last Year": 365
         }
         days_back = window_map.get(window, 7)
@@ -122,10 +114,10 @@ def render_intelligence_hub_page():
     else:
         # Standard Live Logic
         # Force a sync for current-day data requests
-        should_force = global_sync or (window == "Yesterday & Today") or needs_history
+        should_force = global_sync or (window == "Last Day") or needs_history
         start_orders_background_refresh(start_date_str, end_date_str, force=should_force)
         
-        sync_mode = "live" if (window == "Yesterday & Today" or global_sync) else "cache_only"
+        sync_mode = "live" if (window == "Last Day" or global_sync) else "cache_only"
         df_sales_raw = prune_dataframe(load_hybrid_data(start_date=start_date_str, end_date=end_date_str, woocommerce_mode=sync_mode), DASHBOARD_SALES_COLUMNS)
     
     if "Category" not in df_sales_raw.columns:
@@ -188,7 +180,7 @@ def render_intelligence_hub_page():
         "stock": stock_df,
         "summary": {"woocommerce_live": len(df_sales_raw), "stock_rows": len(stock_df)},
         "hint": orders_status.get("status_message", ""),
-        "window_label": "7 days" if days_back == 7 else ("month" if days_back == 30 else f"{days_back} days")
+        "window_label": window.lower() if window != "Custom Date Range" else f"{days_back} days"
     }
 
     data = st.session_state.dashboard_data
@@ -251,13 +243,13 @@ def render_intelligence_hub_page():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Routing based on sidebar selection
-    selection = st.session_state.get("active_section", "💎 Market Overview")
+    selection = st.session_state.get("active_section", "💎 Sales Overview")
 
-    if selection == "💎 Market Overview":
+    if selection == "💎 Sales Overview":
         # Global Narrative & Summary
         render_dashboard_story(data["sales_exec"], data["customers"], data["ml"], window)
         st.divider()
-        render_market_overview_timeseries(data["sales_exec"], ml_bundle=data["ml"])
+        render_sales_overview_timeseries(data["sales_exec"], ml_bundle=data["ml"])
 
         
 

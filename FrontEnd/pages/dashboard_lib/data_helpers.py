@@ -4,12 +4,11 @@ from BackEnd.utils.sales_schema import ensure_sales_schema
 
 def prune_dataframe(df: pd.DataFrame, preferred_columns: list[str]) -> pd.DataFrame:
     sales = ensure_sales_schema(df)
-    if sales.empty:
-        return sales
-    available = [col for col in preferred_columns if col in sales.columns]
-    if not available:
-        return sales
-    return sales.loc[:, available].copy()
+    # Ensure all preferred columns exist, fill missing with pd.NA
+    for col in preferred_columns:
+        if col not in sales.columns:
+            sales[col] = pd.NA
+    return sales[preferred_columns].copy()
 
 def build_order_level_dataset(df: pd.DataFrame) -> pd.DataFrame:
     sales = ensure_sales_schema(df)

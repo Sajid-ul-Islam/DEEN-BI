@@ -44,7 +44,8 @@ def resolve_column(df: pd.DataFrame, canonical_name: str) -> str | None:
 def ensure_sales_schema(df: pd.DataFrame) -> pd.DataFrame:
     """Add canonical e-commerce analytics columns without dropping original source columns."""
     if df is None or df.empty:
-        return pd.DataFrame(columns=list(CANONICAL_ALIASES.keys()))
+        cols = list(CANONICAL_ALIASES.keys()) + ["customer_key", "order_item_key", "Category"]
+        return pd.DataFrame(columns=cols)
 
     out = df.copy()
 
