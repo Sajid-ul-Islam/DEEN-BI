@@ -46,29 +46,14 @@ def icon_metric(label: str, value: str, icon: str = "📊", delta: str = "", del
 
 def metric_highlight(label: str, value: str, delta: str = "", delta_type: str = "up", help_text: str = ""):
     """Premium Enterprise KPI card with glassmorphism and motion transitions."""
-    delta_class = "delta-up" if delta_type == "up" else "delta-down"
     delta_icon = "↑" if delta_type == "up" else "↓"
     delta_color = "#10b981" if delta_type == "up" else "#ef4444"
     
-    delta_html = f"""
-    <div style="display: flex; align-items: center; gap: 4px; color: {delta_color}; font-size: 0.85rem; font-weight: 700; margin-top: 4px;">
-        <span>{delta_icon} {delta}</span>
-    </div>
-    """ if delta else ""
+    delta_html = f'<div style="display: flex; align-items: center; gap: 4px; color: {delta_color}; font-size: 0.85rem; font-weight: 700; margin-top: 4px;"><span>{delta_icon} {delta}</span></div>' if delta else ""
+    help_block = f'<div style="color: #64748b; font-size: 0.75rem; margin-top: 8px; font-weight: 500;">{help_text}</div>' if help_text else ""
     
-    help_block = f'<div style="color:var(--text-muted); font-size:0.75rem; margin-top:8px; font-weight:500;">{help_text}</div>' if help_text else ""
-    
-    st.markdown(
-        f"""
-        <div class="hub-card metric-highlight">
-            <div class="metric-highlight-label">{label}</div>
-            <div class="metric-highlight-value">{value}</div>
-            {delta_html}
-            {help_block}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    html_content = f"""<div class="hub-card metric-highlight"><div class="metric-highlight-label">{label}</div><div class="metric-highlight-value">{value}</div>{delta_html}{help_block}</div>"""
+    st.markdown(html_content, unsafe_allow_html=True)
 
 
 

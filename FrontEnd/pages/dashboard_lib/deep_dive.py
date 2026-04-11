@@ -69,11 +69,12 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
 
     # MAIN UI LAYOUT
     st.markdown("### 🔍 Advanced Market Deep-Dive")
+    st.caption("Perform high-resolution segment analysis to identify operational opportunities and regional hotspots.")
     
     # FILTER CONTROL CENTER
     with st.expander("🛠️ Advanced Cluster Filters", expanded=True):
-        st.markdown("**📦 Category & Item**")
-        f_c1, f_c2 = st.columns(2)
+        st.markdown("**📦 Category & Operations**")
+        f_c1, f_c2, f_c3, f_c4 = st.columns(4)
         
         with f_c1:
             # 1. Category
@@ -85,7 +86,6 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
         with f_c2:
             # Combined Product Name & SKU selection
             sku_options = df_sales[df_sales["Category"].isin(active_cats)] if active_cats else df_sales
-            # Create a display name for the multiselect (Clean Name + SKU)
             sku_options = sku_options.copy()
             sku_options["_display_name"] = sku_options["_clean_name"] + " [" + sku_options["sku"].astype(str) + "]"
             
@@ -93,22 +93,75 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
             sel_items = st.multiselect("Products (Name + SKU)", ["All"] + avail_items, default=["All"])
             active_items = [] if "All" in sel_items or not sel_items else sel_items
 
+        with f_c3:
+            # 3. Size Filter
+            if active_items:
+                size_options = sku_options[sku_options["_display_name"].isin(active_items)]
+            else:
+                size_options = sku_options
+                
+            avail_sizes = sorted([str(s) for s in size_options["_size"].dropna().unique() if str(s).strip()])
+            sel_sizes = st.multiselect("Variants (Size)", ["All"] + avail_sizes, default=["All"])
+            active_sizes = [] if "All" in sel_sizes or not sel_sizes else sel_sizes
+
+        with f_c4:
+            # 4. Trend Filter
+            avail_trends = sorted([str(t) for t in df_sales["Trend"].dropna().unique()])
+            sel_trends = st.multiselect("Trend Velocity", ["All"] + avail_trends, default=["All"])
+            active_trends = [] if "All" in sel_trends or not sel_trends else sel_trends
+
     # APPLY COMPREHENSIVE FILTERING
     w_df = df_sales.copy()
-    
-    # Logic Filters
     if active_cats: w_df = w_df[w_df["Category"].isin(active_cats)]
     if active_items: 
         w_df["_display_name"] = w_df["_clean_name"] + " [" + w_df["sku"].astype(str) + "]"
         w_df = w_df[w_df["_display_name"].isin(active_items)]
+    if active_sizes: w_df = w_df[w_df["_size"].isin(active_sizes)]
+    if active_trends: w_df = w_df[w_df["Trend"].isin(active_trends)]
 
+    if w_df.empty:
+        st.warning("No sales data matches the active filter cluster. Adjust filters to refine your search.")
+        return
 
-    # VISUALIZATION SUITE
-    st.markdown(f"**Found {len(w_df)} records matching these constraints**")
+    # --- Strategic Insights Generation ---
+    top_platform = w_df["source"].mode()[0] if not w_df["source"].empty else "N/A"
+    top_district = w_df["_region_display"].mode()[0] if not w_df["_region_display"].empty else "N/A"
+    velocity_dom = w_df["Trend"].mode()[0] if not w_df["Trend"].empty else "N/A"
+    avg_basket = w_df.groupby("order_id")["qty"].sum().mean()
     
+    # VISUALIZATION SUITE
+    st.markdown("#### ⚡ Strategic Pulse")
+    i_c1, i_c2, i_c3, i_c4 = st.columns(4)
+    with i_c1: ui.metric_highlight("Total Sold", f"{int(w_df['qty'].sum()):,}", help_text="Total units in this segment")
+    with i_c2: ui.metric_highlight("Segment Value", f"৳{w_df['item_revenue'].sum():,.0f}", help_text="Revenue contribution")
+    with i_c3: ui.metric_highlight("Avg Basket", f"{avg_basket:.1f} pcs", help_text="Units per order in segment")
+    with i_c4: ui.metric_highlight("Top Region", top_district, help_text="Dominant market hotspot")
+
+    st.markdown(f"🚩 **Key Insight:** This segment is primarily driven by **{top_platform}** customers in **{top_district}**, typically moving at **{velocity_dom}** speeds.")
+
     cluster_t1, cluster_t2, cluster_t3, cluster_t4 = st.tabs(["📊 Performance Mix", "🔍 Variant Analysis", "🛒 Basket Context", "📋 Cluster Data Ledger"])
     
     with cluster_t1:
+        # Leaderboard Chart (Volume vs Value)
+        leader_df = w_df.groupby("_clean_name").agg(
+            Units=("qty", "sum"),
+            Revenue=("item_revenue", "sum")
+        ).reset_index().sort_values("Revenue", ascending=False).head(15)
+        
+        # Calculate Share % safely
+        total_cluster_rev = leader_df["Revenue"].sum()
+        if total_cluster_rev > 0:
+            leader_df["Revenue Share %"] = (leader_df["Revenue"] / total_cluster_rev * 100).round(1)
+        else:
+            leader_df["Revenue Share %"] = 0
+        
+        fig = px.bar(leader_df, x="Revenue", y="_clean_name", title="Volume vs Value Leaderboard (Top 15)",
+                     orientation='h', color="Units", color_continuous_scale="Viridis",
+                     hover_data=["Units", "Revenue Share %"],
+                     labels={"_clean_name": "Product", "Revenue": "Gross Revenue (৳)"})
+        fig.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig, use_container_width=True)
+        
         c1, c2 = st.columns(2)
         with c1:
             # Trend Revenue Pie
@@ -120,9 +173,31 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
         with c2:
             # Source/Platform Bar
             s_rev = w_df.groupby("source")["item_revenue"].sum().reset_index()
-            fig = px.bar(s_rev, x="source", y="item_revenue", title="revenue by platform source",
+            fig = px.bar(s_rev, x="source", y="item_revenue", title="Revenue by Platform Source",
                          color="item_revenue", color_continuous_scale="Tealgrn")
             st.plotly_chart(fig, use_container_width=True)
+
+        # NEW: Operational Category Mix
+        st.divider()
+        st.markdown("##### 📦 Operational Category Mix")
+        occ1, occ2 = st.columns(2)
+        
+        cat_intell = w_df.groupby("Category").agg(
+            Revenue=("item_revenue", "sum"),
+            Units=("qty", "sum")
+        ).reset_index().sort_values("Revenue", ascending=False)
+
+        with occ1:
+            # Category Revenue Donut
+            fig_cat_donut = px.pie(cat_intell, values="Revenue", names="Category", title="Revenue Contribution by Category",
+                                   hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+            st.plotly_chart(fig_cat_donut, use_container_width=True)
+            
+        with occ2:
+            # Category Volume Bar
+            fig_cat_bar = px.bar(cat_intell, x="Category", y="Units", title="Unit Velocity by Category",
+                                 color="Units", color_continuous_scale="Agsunset")
+            st.plotly_chart(fig_cat_bar, use_container_width=True)
 
     with cluster_t2:
         v_c1, v_c2 = st.columns(2)
