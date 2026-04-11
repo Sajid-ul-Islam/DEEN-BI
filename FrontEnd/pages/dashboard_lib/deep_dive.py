@@ -139,17 +139,21 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
     top_platform = w_df["source"].mode()[0] if not w_df["source"].empty else "N/A"
     top_district = w_df["_region_display"].mode()[0] if not w_df["_region_display"].empty else "N/A"
     velocity_dom = w_df["Trend"].mode()[0] if not w_df["Trend"].empty else "N/A"
-    avg_basket = w_df.groupby("order_id")["qty"].sum().mean()
+    
+    # Order Penetration Logic
+    total_orders_in_range = df_sales["order_id"].nunique()
+    segment_orders = w_df["order_id"].nunique()
+    penetration = (segment_orders / total_orders_in_range * 100) if total_orders_in_range > 0 else 0
     
     # VISUALIZATION SUITE
     st.markdown("#### ⚡ Strategic Pulse")
     i_c1, i_c2, i_c3, i_c4 = st.columns(4)
     with i_c1: ui.metric_highlight("Total Sold", f"{int(w_df['qty'].sum()):,}", help_text="Total units in this segment")
-    with i_c2: ui.metric_highlight("Segment Value", f"৳{w_df['item_revenue'].sum():,.0f}", help_text="Revenue contribution")
-    with i_c3: ui.metric_highlight("Avg Basket", f"{avg_basket:.1f} pcs", help_text="Units per order in segment")
+    with i_c2: ui.metric_highlight("Segment Value", f"৳{w_df['item_revenue'].sum():,.0f}", help_text="Estimated revenue contribution")
+    with i_c3: ui.metric_highlight("Order Penetration", f"{penetration:.1f}%", help_text="% of total orders containing these items")
     with i_c4: ui.metric_highlight("Top Region", top_district, help_text="Dominant market hotspot")
 
-    st.markdown(f"🚩 **Key Insight:** This segment is primarily driven by **{top_platform}** customers in **{top_district}**, typically moving at **{velocity_dom}** speeds.")
+    st.markdown(f"🚩 **Key Insight:** This segment appears in **{penetration:.1f}%** of all orders, primarily driven by **{top_platform}** customers in **{top_district}**.")
 
     cluster_t1, cluster_t2, cluster_t3, cluster_t4 = st.tabs(["📊 Performance Mix", "🔍 Variant Analysis", "🛒 Basket Context", "📋 Cluster Data Ledger"])
     

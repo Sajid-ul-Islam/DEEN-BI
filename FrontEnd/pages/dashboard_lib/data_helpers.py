@@ -85,15 +85,20 @@ def estimate_line_revenue(df: pd.DataFrame) -> pd.Series:
     direct_candidates = []
     for col in ["item_revenue", "Item Revenue", "line_total", "Line Total"]:
         if col in sales.columns:
-            direct_candidates.append(pd.to_numeric(sales[col], errors="coerce"))
-    if direct_candidates:
-        return direct_candidates[0].fillna(0)
+            vals = pd.to_numeric(sales[col], errors="coerce")
+            if vals.notna().any() and vals.sum() > 0:
+                return vals.fillna(0)
+    
+    # Fallback to Unit Price * Qty
     for col in ["item_cost", "Item Cost", "price", "Price"]:
         if col in sales.columns:
             unit_price = pd.to_numeric(sales[col], errors="coerce").fillna(0)
-            if unit_price.gt(0).any():
+            if unit_price.sum() > 0:
                 return unit_price * qty
-    line_counts = sales.groupby("order_id")["order_id"].transform("size").replace(0, pd.NA)
-    qty_totals = sales.groupby("order_id")["qty"].transform("sum").replace(0, pd.NA)
+                
+    # Pro-rata Distribution of Order Total
+    line_counts = sales.groupby("order_id")["order_id"].transform("size").replace(0, 1)
+    qty_totals = sales.groupby("order_id")["qty"].transform("sum").replace(0, 1)
     order_total = pd.to_numeric(sales.get("order_total", 0), errors="coerce").fillna(0)
+    
     return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
