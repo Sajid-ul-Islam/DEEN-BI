@@ -68,7 +68,7 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
     df_sales["_region_display"] = df_sales.apply(get_region_name, axis=1)
 
     # MAIN UI LAYOUT
-    st.markdown("### 🔍 Advanced Market Deep-Dive")
+    st.markdown("### 📥 Sales Data Ingestion & Analysis")
     st.caption("Perform high-resolution segment analysis to identify operational opportunities and regional hotspots.")
     
     # FILTER CONTROL CENTER

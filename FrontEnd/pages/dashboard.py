@@ -278,7 +278,7 @@ def render_intelligence_hub_page():
         # Pass raw sales for Identity Search (requires phone/email)
         render_customer_insight_tab(reg_val, guest_val, data["customer_count"], data["sales"])
         
-    elif selection == "🔍 Deep-Dive Clusters":
+    elif selection == "📥 Sales Data Ingestion":
         render_deep_dive_tab(data["sales"], data["stock"])
         
     elif selection == "📦 Stock Insight":

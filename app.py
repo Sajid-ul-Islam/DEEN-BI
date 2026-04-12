@@ -107,7 +107,7 @@ def _render_workspace_sidebar():
         
         nav_map = {
             "💎 Sales Overview": "💎 Sales Overview",
-            "🔍 Deep-Dive Clusters": "🔍 Deep-Dive Clusters",
+            "📥 Sales Data Ingestion": "📥 Sales Data Ingestion",
             "📊 Traffic & Acquisition": "📊 Traffic & Acquisition",
             "👥 Customer Insight": "👥 Customer Insight",
             ins_label: "📦 Stock Insight",
