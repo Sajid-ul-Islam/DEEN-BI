@@ -83,6 +83,33 @@ Responsibilities:
 - customer-lifecycle metrics
 - forecasting and anomaly signals
 
+### Customer Insight Module
+
+**Location:** `src/` directory with dedicated submodules
+
+- `src/inheritance/base_api_client.py` - Base HTTP client with retry logic
+- `src/services/woocommerce/` - WooCommerce API integration
+  - `api_client.py` - WooCommerceAPI class (inherits BaseAPIClient)
+  - `fetch_customers.py` - Customer data fetching with caching
+  - `fetch_orders.py` - Order data fetching with caching
+  - `fetch_products.py` - Product data fetching with caching
+- `src/utils/woocommerce_helpers.py` - Data processing utilities
+- `src/components/customer_insight/` - UI components
+  - `customer_filters.py` - Dynamic filter controls
+  - `customer_selector.py` - Customer list and selection
+  - `customer_report.py` - Detailed customer reports
+  - `order_history_table.py` - Order history display
+- `FrontEnd/pages/dashboard_lib/customer_insight_page.py` - Main page controller
+
+**Responsibilities:**
+
+- Live WooCommerce REST API integration
+- Dynamic customer filtering by products, amount, orders, date range
+- Individual customer deep-dive analysis
+- Order history and spending trend visualization
+- Real-time data with 1-hour caching
+- Error handling with user-friendly messages
+
 ### Utilities
 
 - `BackEnd/utils/sales_schema.py`
@@ -110,6 +137,25 @@ Responsibilities:
 2. cache local stock snapshot
 3. reuse cached inventory while refresh runs
 4. compare stock against demand forecast
+
+### Customer Insight flow
+
+1. User configures filters (products, amount range, order count, date range)
+2. System fetches orders from `/wp-json/wc/v3/orders` with date filters
+3. If product filter active, system also fetches products from `/wp-json/wc/v3/products`
+4. Orders are aggregated to customer level using unique phone/email logic
+5. Amount and order count filters are applied to aggregated data
+6. Matching customers displayed in sortable table with radio selection
+7. On selection, system fetches customer details from `/wp-json/wc/v3/customers/{id}`
+8. Order history fetched and displayed with metrics calculation
+9. Optional spending trend chart generated from order totals
+10. All data cached with 1-hour TTL; manual refresh available
+
+**API Endpoints Used:**
+- `GET /wp-json/wc/v3/customers` - List customers with pagination
+- `GET /wp-json/wc/v3/customers/{id}` - Individual customer details
+- `GET /wp-json/wc/v3/orders` - List orders with filters
+- `GET /wp-json/wc/v3/products` - List products for filtering
 
 ## 5. Trust and Consistency Rules
 

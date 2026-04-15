@@ -65,11 +65,40 @@ The system joins real-time stock levels with sales affinity data to prevent "Orp
    pip install -r requirements.txt
    ```
 2. **Configure Secrets:**
-   Add your `[woocommerce]` and `[auth]` credentials to `.streamlit/secrets.toml`.
+   Create `.streamlit/secrets.toml` with your credentials:
+   ```toml
+   [woocommerce]
+   store_url = "https://yourstore.com"
+   consumer_key = "ck_your_consumer_key"
+   consumer_secret = "cs_your_consumer_secret"
+   ```
 3. **Run Terminal:**
    ```bash
    streamlit run app.py
    ```
+
+### 🔐 WooCommerce API Setup
+
+To enable the **Customer Insight** module:
+
+1. **Generate API Keys in WooCommerce:**
+   - Go to **WooCommerce → Settings → Advanced → REST API**
+   - Click **Add Key**
+   - Set permissions to **"Read"** (minimum) or **"Read/Write"**
+   - Copy the **Consumer Key** and **Consumer Secret**
+
+2. **Configure Store Permalinks:**
+   - Go to **Settings → Permalinks**
+   - Select any option except "Plain" (required for REST API)
+   - Save changes
+
+3. **Add Credentials:**
+   - Create `.streamlit/secrets.toml` in project root
+   - Add the credentials as shown above
+
+4. **Test Connection:**
+   - Navigate to **👥 Customer Insight** in the sidebar
+   - The module will verify connectivity automatically
 
 ---
 **Engineered with precision for DEEN Commerce.**

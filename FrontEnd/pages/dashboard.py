@@ -40,6 +40,10 @@ from .dashboard_lib.audit import render_data_audit, render_data_trust_panel
 from .dashboard_lib.acquisition import render_acquisition_analytics
 from .dashboard_lib.operations import render_operational_health
 from BackEnd.services.customer_insights import generate_cohort_matrix
+from .dashboard_lib.customer_insight_page import (
+    render_customer_insight_page,
+    render_enhanced_customer_insight_tab,
+)
 
 DASHBOARD_SALES_COLUMNS = [
     "order_id", "order_date", "order_total", "customer_key", "customer_name",
@@ -337,6 +341,15 @@ def render_intelligence_hub_page():
         
     elif selection == "👥 Customer Insight":
         st.subheader("Customer Insight")
+        # Calculate registered vs guest revenue
+        df_exec = data["sales_exec"]
+        if "customer_key" in df_exec.columns:
+            is_registered = df_exec["customer_key"].str.startswith("reg_", na=False)
+            reg_val = df_exec[is_registered]["item_revenue"].sum() if is_registered.any() else 0
+            guest_val = df_exec[~is_registered]["item_revenue"].sum() if (~is_registered).any() else 0
+        else:
+            reg_val = 0
+            guest_val = 0
         # Pass executive sales for analysis consistency
         render_customer_insight_tab(reg_val, guest_val, data["customer_count"], data["sales_exec"])
         
@@ -359,194 +372,14 @@ def render_intelligence_hub_page():
 # --- MERGED COMPONENT LOGIC ---
 
 def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts: int, df_sales: pd.DataFrame = None):
-    """Merged Customer Intelligence Component."""
-    if "dashboard_data" not in st.session_state:
-        st.info("Please sync data to view customer intelligence.")
-        return
-        
-    df = st.session_state.dashboard_data["customers"]
-    if df.empty:
-        st.warning("No customer segments identified in this period.")
-        return
-
-    # v10.5: Account Registrations Summary (Moved to Top for Visibility)
-    st.markdown("### 🔐 Account Registrations")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Registered Customers", f"{total_accounts:,}")
+    """Enhanced Customer Intelligence Component with deep-dive analysis.
     
-    reg_pct = (reg_rev / (reg_rev + guest_rev) * 100) if (reg_rev + guest_rev) > 0 else 0
-    m2.metric("Registered Revenue Share", f"{reg_pct:.1f}%")
-    
-    is_reg = df["customer_id"].str.startswith("reg_", na=False)
-    reg_aov = df[is_reg]["avg_order_value"].mean()
-    gst_aov = df[~is_reg]["avg_order_value"].mean()
-    gap = ((reg_aov - gst_aov) / gst_aov * 100) if gst_aov > 0 else 0
-    m3.metric("Member vs. Guest AOV", f"{gap:+.1f}% Gap", help="Registered members usually spend significantly more per order.")
-    
-    st.divider()
-
-    # Visual Segments sequentially rendered
-    st.markdown("### 📊 Value Segments")
-    if True:
-        # Segment Mix
-        mix_df = df["segment"].value_counts().reset_index()
-        mix_df.columns = ["Segment", "Count"]
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(ui.donut_chart(mix_df, values="Count", names="Segment", title="Segment Distribution"), use_container_width=True)
-        with c2:
-            rev_df = df.groupby("segment")["total_revenue"].sum().reset_index().sort_values("total_revenue", ascending=False)
-            st.plotly_chart(ui.bar_chart(rev_df, x="total_revenue", y="segment", title="Revenue by Segment", color_scale="Tealgrn"), use_container_width=True)
-
-        c3, c4 = st.columns(2)
-        with c3:
-            cycle_df = df.groupby("segment")["purchase_cycle_days"].mean().reset_index().dropna()
-            if not cycle_df.empty:
-                st.plotly_chart(ui.bar_chart(cycle_df, x="purchase_cycle_days", y="segment", title="Avg Days Between Purchases", color_scale="Plasma"), use_container_width=True)
-        with c4:
-            clv_df = df.groupby("segment")["clv"].mean().reset_index().dropna()
-            if not clv_df.empty:
-                st.plotly_chart(ui.bar_chart(clv_df, x="clv", y="segment", title="Avg Customer Lifetime Value (CLV)", color_scale="Purpor"), use_container_width=True)
-
-    st.divider()
-    st.markdown("### 🎯 Priority Outreach")
-    if True:
-        # CRM Queue
-        st.caption("Strategic segments requiring immediate attention based on recency and business value.")
-        priority = df.sort_values(["total_revenue", "recency_days"], ascending=[False, True]).head(15)
-        st.dataframe(
-            priority[["primary_name", "segment", "total_revenue", "total_orders", "recency_days"]].rename(
-                columns={"primary_name": "Customer", "total_revenue": "LTV", "recency_days": "Last Purchase (Days)"}
-            ),
-            use_container_width=True, hide_index=True
-        )
-
-
-        
-        st.divider()
-        c5, c6 = st.columns(2)
-        with c5:
-            # Registration Mix logic
-            mix_df = pd.DataFrame({
-                "Type": ["Registered Account", "Guest Checkout"],
-                "Revenue": [reg_rev, guest_rev]
-            })
-            st.plotly_chart(ui.donut_chart(mix_df, values="Revenue", names="Type", title="Sales by Enrollment Type"), use_container_width=True)
-        with c6:
-            # AOV Comparison logic
-            aov_df = pd.DataFrame({
-                "Account Type": ["Registered", "Guest"],
-                "AOV": [reg_aov, gst_aov]
-            })
-            st.plotly_chart(ui.bar_chart(aov_df, x="AOV", y="Account Type", title="Average Order Value Comparison"), use_container_width=True)
-
-    st.divider()
-    st.markdown("### 📈 Cohort Retention")
-    if True:
-        st.markdown("#### 📈 Customer Retention Cohorts")
-        st.caption("Tracking how cohorts of new customers return and purchase in subsequent months.")
-        
-        cohort_matrix = generate_cohort_matrix(df_sales)
-        if not cohort_matrix.empty:
-            import plotly.graph_objects as go
-            
-            # Heatmap representation
-            fig = go.Figure(data=go.Heatmap(
-                z=cohort_matrix.values,
-                x=[f"Month {i}" for i in cohort_matrix.columns],
-                y=[str(i) for i in cohort_matrix.index],
-                colorscale='YlGnBu',
-                text=np.around(cohort_matrix.values, decimals=1),
-                texttemplate="%{text}%",
-                hoverinfo='z'
-            ))
-            fig.update_layout(title="Monthly Retention Matrix (%)", xaxis_title="Retention Month", yaxis_title="Cohort Month")
-            st.plotly_chart(fig, use_container_width=True)
-            
-            with st.expander("📝 Understanding Cohorts"):
-                st.info("Each row represents a 'Cohort' of customers who made their first purchase in that month. The columns show the percentage of those customers who returned to buy in subsequent months.")
-        else:
-            st.info("Insufficient longitudinal data to generate a cohort matrix.")
-
-    st.divider()
-    st.markdown("### 🔍 Identity Search")
-    if True:
-        st.markdown("#### 🔍 Customer Identity 360")
-        st.caption("Locate any customer profile by Phone, Email, Name, or Order ID.")
-        
-        c_search1, c_search2 = st.columns([4, 1])
-        with c_search1:
-            q = st.text_input("Search ID", placeholder="017..., user@email.com, Deen, #10234", label_visibility="collapsed", key="cust_search_input").strip()
-        with c_search2:
-            search_trigger = st.button("🔍 Search", key="btn_cust_search", use_container_width=True)
-        
-        if q or search_trigger:
-            if not q:
-                st.warning("Please enter a search term.")
-            else:
-                from BackEnd.services.customer_insights import search_customers
-            # We use the segmented dataframe 'df' for high-level search
-            results = search_customers(q, df)
-            
-            if q.startswith("#") or (q.isdigit() and len(q) > 4 and len(q) < 10):
-                # Potential Order ID search
-                oid = q.replace("#", "")
-                if df_sales is not None:
-                    match_order = df_sales[df_sales["order_id"].astype(str) == oid]
-                    if not match_order.empty:
-                        st.success(f"Found Order: #{oid}")
-                        st.dataframe(match_order[["item_name", "qty", "price", "order_status", "order_date"]], hide_index=True)
-                        # Derive customer from order
-                        name_from_order = match_order.iloc[0]["customer_name"]
-                        results = df[df["primary_name"].str.contains(name_from_order, case=False, na=False)]
-            
-            if results.empty:
-                st.info("No matching profiles found in the current intelligence cache.")
-            else:
-                if len(results) > 1:
-                    st.warning(f"Found {len(results)} potential matches. Select a profile below:")
-                    selected_name = st.selectbox("Select Profile", results["primary_name"].tolist())
-                    profile = results[results["primary_name"] == selected_name].iloc[0]
-                else:
-                    profile = results.iloc[0]
-                
-                # Render Profile
-                st.markdown(f"### Profile: {profile['primary_name']}")
-                p1, p2, p3, p4 = st.columns(4)
-                
-                reg_status = "✅ Registered" if str(profile["customer_id"]).startswith("reg_") else "👤 Guest"
-                segment = profile.get("segment", "Regular")
-                tier_colors = {"VIP": "#FDE047", "Potential Loyalist": "#10B981", "New": "#3B82F6", "At Risk": "#F87171", "Churned": "#6B7280"}
-                tier_color = tier_colors.get(segment, "#E2E8F0")
-                
-                st.markdown(f'<div style="background:{tier_color}33; color:{tier_color}; border:1px solid {tier_color}; border-radius:12px; padding:4px 12px; display:inline-block; font-weight:700; margin-bottom:12px;">🏆 {segment}</div>', unsafe_allow_html=True)
-                
-                p1.metric("Account Type", reg_status)
-                p2.metric("Lifetime Orders", f"{int(profile['total_orders'])}")
-                p3.metric("Lifetime Value (LTV)", f"৳{profile['total_revenue']:,.0f}")
-                p4.metric("Avg Basket", f"৳{profile['avg_order_value']:,.0f}")
-                
-                # Detailed Info
-                c_inf1, c_inf2 = st.columns([2, 1])
-                with c_inf1:
-                    with st.expander("📄 Identification & Contact Details", expanded=True):
-                        st.write(f"**Primary Email:** {profile.get('all_emails', 'N/A') or 'N/A'}")
-                        st.write(f"**Primary Phone:** {profile.get('all_phones', 'N/A') or 'N/A'}")
-                        st.write(f"**First Seen:** {pd.to_datetime(profile['first_order']).strftime('%d %b %Y')}")
-                        st.write(f"**Last Active:** {pd.to_datetime(profile['last_order']).strftime('%d %b %Y')} ({int(profile['recency_days'])} days ago)")
-                
-                with c_inf2:
-                    # Tweak 2: Product Affinity
-                    if "favorite_product" in profile:
-                        st.markdown("##### 🛍️ Product Affinity")
-                        st.caption("Top item for this customer.")
-                        st.info(f"**Most Bought:** {profile['favorite_product']}")
-
-    st.divider()
-    st.markdown("### 🔍 Identity Ledger")
-    if True:
-        st.dataframe(df, use_container_width=True, hide_index=True)
+    This enhanced version combines the original segment analysis with
+    the new Customer Insight module for dynamic filtering and detailed
+    customer reports.
+    """
+    # Use the enhanced version that includes both legacy insights and new module
+    render_enhanced_customer_insight_tab(reg_rev, guest_rev, total_accounts, df_sales)
 
 
 # End of Dashboard controller logic
