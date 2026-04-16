@@ -54,23 +54,40 @@ DASHBOARD_SALES_COLUMNS = [
 # Internal Page Logic will be appended below
 
 def render_intelligence_hub_page():
-    st.markdown('<div class="live-indicator"><span class="live-dot"></span>System Online | Intelligence Hub Active</div>', unsafe_allow_html=True)
-    
     import os
     import base64
     banner_path = os.path.join("FrontEnd", "assets", "data_analytics_banner.png")
+    
     if os.path.exists(banner_path):
         with open(banner_path, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
+        
         st.markdown(
             f'''
-            <div style="margin-top: 10px; margin-bottom: 25px;">
-                <img src="data:image/png;base64,{encoded_string}" 
-                     style="width: 100%; height: 140px; object-fit: cover; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
+            <div style="position: relative; margin-bottom: 25px; border-radius: 12px; overflow: hidden; height: 160px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 6px 16px rgba(0,0,0,0.3);">
+                <img src="data:image/png;base64,{encoded_string}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.8;">
+                <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0) 100%); display: flex; flex-direction: column; justify-content: center; padding-left: 30px;">
+                    <h1 style="color: white; margin: 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -1px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
+                        DEEN <span style="color: #3b82f6;">Business Intelligence</span>
+                    </h1>
+                    <div style="display: flex; align-items: center; margin-top: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); padding: 4px 12px; border-radius: 20px; width: fit-content;">
+                        <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 10px; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite;"></div>
+                        <span style="color: #10b981; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">System Online | Intelligence Hub Active</span>
+                    </div>
+                </div>
             </div>
+            <style>
+                @keyframes pulse {{
+                    0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }}
+                    70% {{ transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }}
+                    100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }}
+                }}
+            </style>
             ''',
             unsafe_allow_html=True
         )
+    else:
+        st.markdown('<div class="live-indicator"><span class="live-dot"></span>System Online | Intelligence Hub Active</div>', unsafe_allow_html=True)
     global_sync = st.session_state.get("global_sync_request", False)
     if global_sync:
         st.session_state["global_sync_request"] = False # Reset
