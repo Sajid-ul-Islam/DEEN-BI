@@ -370,13 +370,25 @@ def render_intelligence_hub_page():
     daily_gross = df_exec.groupby(df_exec['order_date'].dt.date)['item_revenue'].sum().reset_index()
     daily_gross.columns = ['date', 'gross']
     
-    # Process returns for daily mapping
+    # Calculate daily lost value by cross-referencing returns with sales revenue
     ret_df_local = st.session_state.returns_data.copy()
     ret_df_local['date'] = pd.to_datetime(ret_df_local['date']).dt.date
-    daily_returns = ret_df_local.groupby('date').agg(
-        val_lost=('return_value_extracted', 'sum'),
-        part_lost=('partial_amount', 'sum')
-    ).reset_index()
+    
+    # Identify full returns and merge with sales to get their revenue value
+    full_returns = ret_df_local[ret_df_local["issue_type"].isin(["Paid Return", "Non Paid Return"])].copy()
+    # Ensure ID types match for merging
+    full_returns['order_id'] = full_returns['order_id'].astype(str)
+    sales_for_join = df_exec[['order_id', 'item_revenue']].copy()
+    sales_for_join['order_id'] = sales_for_join['order_id'].astype(str)
+    
+    full_returns_with_val = pd.merge(full_returns, sales_for_join, on='order_id', how='left')
+    
+    # Group by date for mapping
+    daily_full_loss = full_returns_with_val.groupby('date')['item_revenue'].sum().reset_index(name='val_lost')
+    daily_partial_loss = ret_df_local[ret_df_local["issue_type"] == "Partial"].groupby('date')['partial_amount'].sum().reset_index(name='part_lost')
+    
+    # Merge losses
+    daily_returns = pd.merge(daily_full_loss, daily_partial_loss, on='date', how='outer').fillna(0)
     daily_returns['total_lost'] = daily_returns['val_lost'] + daily_returns['part_lost']
     
     # Merge for plotting
