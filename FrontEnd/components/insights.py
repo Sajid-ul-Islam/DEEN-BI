@@ -33,13 +33,38 @@ def render_insight_dashboard(insights: list, recommendations: list, alerts: list
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.error(f"⚠️ **Critical Alerts**: {' | '.join(alerts)}")
 
-def render_ai_pilot_chat():
-    """Renders the 'Ask Your Data' input box."""
-    with st.expander("🚀 Data Pilot | Natural Language Query", expanded=False):
-        query = st.text_input("Ask anything about your operations (e.g., 'Why did orders drop yesterday?')", 
-                             placeholder="Type your question here...")
-        if query:
-            with st.spinner("Analyzing operational signals..."):
-                # Integration with LLM would go here
-                st.info("The Data Pilot is analyzing cross-table signals to generate a synthesized response.")
-                st.markdown("**Analysis Preview**: Orders dropped by 12% compared to previous Sunday. Key factor identified: Stockout in 'Product X' which usually accounts for 15% of weekend revenue.")
+def render_ai_pilot_chat(sales_df: pd.DataFrame):
+    """Renders the 'Ask Your Data' input box with live NLP processing."""
+    import pandas as pd
+    from BackEnd.services.nlp_engine import get_nlp_response
+    
+    st.markdown("""
+        <style>
+        .stTextInput > div > div > input {
+            background-color: rgba(79, 70, 229, 0.05);
+            border: 1px solid rgba(79, 70, 229, 0.2);
+            color: #4f46e5;
+            font-weight: 500;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    query = st.text_input("💬 Ask Data Pilot (e.g., 'What is my top category this month?' or 'revenue yesterday')", 
+                         placeholder="Type your command here...",
+                         key="nlp_query_input")
+    
+    if query:
+        with st.spinner("🧠 AI Pilot is querying the data streams..."):
+            response = get_nlp_response(query, sales_df)
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%); 
+                        padding: 20px; border-radius: 12px; border: 1px solid rgba(79, 70, 229, 0.2); 
+                        margin-top: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div style="color: #4f46e5; font-weight: 800; font-size: 0.75rem; letter-spacing: 1px; margin-bottom: 8px;">🚀 DATA PILOT RESPONSE</div>
+                <div style="font-size: 1.05rem; line-height: 1.5; color: var(--text-color);">{response}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Predictive follow-up
+            if "revenue" in query.lower():
+                st.caption("✨ Tip: Try asking 'Who is my top customer?' to see who contributed to this revenue.")

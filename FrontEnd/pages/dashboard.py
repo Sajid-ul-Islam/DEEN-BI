@@ -484,7 +484,7 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame):
     """)
     
     from FrontEnd.components.insights import render_ai_pilot_chat
-    render_ai_pilot_chat()
+    render_ai_pilot_chat(sales_df)
     
     st.divider()
     
