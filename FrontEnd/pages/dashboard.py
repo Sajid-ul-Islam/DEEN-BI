@@ -492,13 +492,8 @@ def render_intelligence_hub_page():
         st.subheader("Operational Forecasting")
         render_inventory_health(data["stock"], data["ml"].get("forecast"), data["sales"])
         
-    elif selection == "🛡️ Data Trust":
-        st.subheader("System Reliability Audit")
-        render_data_trust_panel(data["sales"])
-        render_data_audit(data["sales"], data["customers"])
-        
     elif selection == "🚀 Data Pilot":
-        render_data_pilot_page(data["sales"], data["stock"])
+        render_data_pilot_page(data["sales"], data["stock"], data["customers"])
 
 
 # --- MERGED COMPONENT LOGIC ---
@@ -516,14 +511,15 @@ def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts
 
 # End of Dashboard controller logic
 
-def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame):
+def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, customers_df: pd.DataFrame = None):
     """The AI-first command interface for natural language operations and Strategic Intelligence."""
     st.markdown('<div class="live-indicator"><span class="live-dot" style="background:#4f46e5; box-shadow: 0 0 10px #4f46e5;"></span>Intelligence Center Active | Data Pilot v11.0</div>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "🚀 Ask Data Pilot", 
         "🚨 Strategic War-Room", 
-        "📦 Market Basket Intel"
+        "📦 Market Basket Intel",
+        "🛡️ Data Trust"
     ])
     
     with tab1:
@@ -559,3 +555,11 @@ def render_data_pilot_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame):
                 st.dataframe(bundles, use_container_width=True, hide_index=True)
         else:
             st.info("Insufficient transaction density to discover complex product associations. Check back after more orders.")
+
+    with tab4:
+        st.markdown("### 🛡️ System Reliability Audit")
+        render_data_trust_panel(sales_df)
+        if customers_df is not None:
+            render_data_audit(sales_df, customers_df)
+        else:
+            st.warning("Customer data unavailable for deep audit.")

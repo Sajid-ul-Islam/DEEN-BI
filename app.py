@@ -106,8 +106,7 @@ def _render_workspace_sidebar():
             "👥 Customer Insight": "👥 Customer Insight",
             "🔄 Returns & Net Sales": "🔄 Returns & Net Sales",
             ins_label: "📦 Stock Insight",
-            "🚀 Data Pilot": "🚀 Data Pilot",
-            "🛡️ Data Trust": "🛡️ Data Trust"
+            "🚀 Data Pilot": "🚀 Data Pilot"
         }
 
         # Initialize section if not set
