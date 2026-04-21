@@ -247,40 +247,126 @@ def _render_kpi_cards(metrics: dict) -> None:
 
 def _render_financial_impact_summary(metrics: dict) -> None:
     """Render decision-ready financial impact cards."""
-    st.markdown("#### ðŸ’° True Revenue & Financial Impact")
-    cols = st.columns(4)
+    st.markdown("#### 💰 TRUE REVENUE & FINANCIAL IMPACT")
+
+    gross = metrics.get('gross_sales', 0)
+    net_sales = metrics.get('net_sales', 0)
+    net_yield_pct = metrics.get('net_yield_pct', (net_sales / gross * 100) if gross > 0 else 0.0)
+
+    # Total returned items and their value
+    total_ret_qty = metrics.get('total_return_qty_all', 0)
+    total_ret_value = metrics.get('full_return_loss', metrics.get('return_value_extracted', 0))
+    returned_orders_pct = metrics.get('returned_orders_pct', 0.0)
+    partial_loss = metrics.get('partial_loss', metrics.get('partial_amounts', 0))
+
+    cols = st.columns(6)
 
     with cols[0]:
         st.markdown(_kpi_card(
-            "ðŸ’µ GROSS SALES",
-            f"à§³{metrics.get('gross_sales', 0):,.0f}",
-            f"{metrics.get('total_orders', 0):,} tracked orders",
-            "#2563eb"
+            "📦 TOTAL RETURNED ITEMS",
+            f"{total_ret_qty} Units",
+            f"{returned_orders_pct:.1f}% of orders returned",
+            "#dc2626"
         ), unsafe_allow_html=True)
 
     with cols[1]:
         st.markdown(_kpi_card(
-            "ðŸ”» FULL RETURN LOSS",
-            f"à§³{metrics.get('full_return_loss', metrics.get('return_value_extracted', 0)):,.0f}",
-            f"{metrics.get('return_count', 0)} returned orders",
-            "#dc2626"
+            "🔄 TOTAL EXCHANGED ITEMS",
+            f"{metrics.get('total_exchanged_items', 0)} Units",
+            "Size/Product changes (no revenue loss)",
+            "#8b5cf6"
         ), unsafe_allow_html=True)
 
     with cols[2]:
         st.markdown(_kpi_card(
-            "ðŸŸ¡ PARTIAL LOSS",
-            f"à§³{metrics.get('partial_loss', metrics.get('partial_amounts', 0)):,.0f}",
-            f"{metrics.get('partial_count', 0)} partial cases",
+            "📉 LOSS (RETURNS + PARTIALS)",
+            f"৳{(metrics.get('return_value_extracted', 0) + partial_loss):,.0f}",
+            f"{metrics.get('return_count', 0)} returns + {metrics.get('partial_count', 0)} partials",
             "#d97706"
         ), unsafe_allow_html=True)
 
     with cols[3]:
         st.markdown(_kpi_card(
-            "âœ¨ NET SETTLED",
-            f"à§³{metrics.get('net_sales', 0):,.0f}",
-            f"{metrics.get('net_yield_pct', 0):.1f}% net yield",
+            "🌟 NET SETTLED SALES",
+            f"৳{net_sales:,.0f}",
+            f"{net_yield_pct:.1f}% net yield",
             "#059669"
         ), unsafe_allow_html=True)
+
+    with cols[4]:
+        st.markdown(_kpi_card(
+            "📊 NET YIELD %",
+            f"{net_yield_pct:.1f}%",
+            "Revenue efficiency after returns",
+            "#2563eb"
+        ), unsafe_allow_html=True)
+
+    with cols[5]:
+        st.markdown(_kpi_card(
+            "📈 RETURNED ORDERS %",
+            f"{returned_orders_pct:.1f}%",
+            f"{metrics.get('return_count', 0)} returned orders",
+            "#ef4444"
+        ), unsafe_allow_html=True)
+
+    # Financial Integrity Chart
+    returns_ready = not metrics.get("daily_financials", pd.DataFrame()).empty
+    if returns_ready:
+        import plotly.graph_objects as go
+        fin_plot = metrics.get("daily_financials", pd.DataFrame()).copy()
+        fin_plot["date"] = pd.to_datetime(fin_plot["date"], errors="coerce")
+        fin_plot = fin_plot.dropna(subset=["date"]).sort_values("date")
+
+        if not fin_plot.empty:
+            st.markdown("---")
+            fig_gap = go.Figure()
+
+            # Layer 1: Deep Red flame base
+            fig_gap.add_trace(go.Scatter(
+                x=fin_plot['date'], y=fin_plot['net_sales'] * 0.3,
+                fill='tozeroy', mode='lines',
+                line=dict(color='rgba(220, 20, 60, 0.3)', width=0),
+                fillcolor='rgba(220, 20, 60, 0.4)',
+                name='Net Settled', stackgroup='one', showlegend=False
+            ))
+
+            # Layer 2: Orange-red
+            fig_gap.add_trace(go.Scatter(
+                x=fin_plot['date'], y=fin_plot['net_sales'] * 0.6,
+                fill='tonexty', mode='lines',
+                line=dict(color='rgba(255, 69, 0, 0.4)', width=0),
+                fillcolor='rgba(255, 69, 0, 0.5)',
+                name='Net Settled', stackgroup='one', showlegend=False
+            ))
+
+            # Layer 3: Flame Orange
+            fig_gap.add_trace(go.Scatter(
+                x=fin_plot['date'], y=fin_plot['net_sales'],
+                fill='tonexty', mode='lines',
+                line=dict(color='rgba(255, 140, 0, 1.0)', width=3),
+                fillcolor='rgba(255, 140, 0, 0.6)',
+                name='Net Settled', stackgroup='one'
+            ))
+
+            # Layer 4: Golden Yellow
+            fig_gap.add_trace(go.Scatter(
+                x=fin_plot['date'], y=fin_plot['gross_sales'],
+                fill='tonexty', mode='lines',
+                line=dict(color='rgba(255, 215, 0, 1.0)', width=2),
+                fillcolor='rgba(255, 215, 0, 0.4)',
+                name='Gross Verified', stackgroup='one'
+            ))
+
+            fig_gap.update_layout(
+                height=280,
+                title="Sales Integrity Gap (Gross vs. Net Settled Sales)",
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=40, b=0),
+                hovermode="x unified",
+                legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
+            )
+            st.plotly_chart(fig_gap, use_container_width=True)
 
     confidence = metrics.get("attribution_confidence_pct", 0.0)
     matched_items = metrics.get("matched_returned_items", 0)

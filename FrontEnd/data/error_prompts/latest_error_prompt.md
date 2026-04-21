@@ -3,7 +3,7 @@
 Context: Hybrid Loader - Orders Refresh
 Error Type: TypeError
 Error: Cannot setitem on a Categorical with a new category (), set the categories first
-Timestamp: 2026-04-21 09:50:32
+Timestamp: 2026-04-21 10:43:34
 
 Environment:
 ```json
