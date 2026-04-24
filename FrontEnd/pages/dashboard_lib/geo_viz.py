@@ -53,6 +53,9 @@ def render_district_map(df_sales: pd.DataFrame):
     df_map["District_Parent"] = df_map.apply(lambda x: get_parent_district(x.get("state", x.get("city", "Unknown"))), axis=1)
     df_map["District_Parent"] = df_map["District_Parent"].apply(normalize_district_name)
     
+    if "order_total" not in df_map.columns: df_map["order_total"] = 0.0
+    if "order_id" not in df_map.columns: df_map["order_id"] = df_map.index
+
     # Store refined label for deep intelligence
     df_map["Display_Region"] = df_map.apply(lambda x: get_region_display(x.get("city", ""), x.get("state", "")), axis=1)
     

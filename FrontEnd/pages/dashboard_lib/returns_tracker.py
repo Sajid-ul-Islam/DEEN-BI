@@ -191,8 +191,11 @@ def render_returns_tracker_page() -> None:
 
     # ── Calculate Total Items Sold for % Calculations ──
     total_items_sold = 0
-    if not sales_df.empty and "quantity" in sales_df.columns:
-        total_items_sold = int(sales_df["quantity"].sum())
+    if not sales_df.empty:
+        if "qty" in sales_df.columns:
+            total_items_sold = int(sales_df["qty"].sum())
+        elif "quantity" in sales_df.columns:
+            total_items_sold = int(sales_df["quantity"].sum())
 
     # ── Compute Metrics ──
     metrics = calculate_net_sales_metrics(df, sales_df=sales_df, total_items_sold=total_items_sold)

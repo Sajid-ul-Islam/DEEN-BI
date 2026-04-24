@@ -181,7 +181,7 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
         if prev <= 0: return "", 0
         diff = curr - prev
         pct = (diff / prev) * 100
-        return f"{pct:+.1f}% vs last {window_label}", diff
+        return f"{abs(pct):.1f}%", diff
 
     d_items_label, d_items_val = get_delta_data(total_items_sold, prev_items)
     d_rev_label, d_rev_val = get_delta_data(total_revenue, prev_revenue)

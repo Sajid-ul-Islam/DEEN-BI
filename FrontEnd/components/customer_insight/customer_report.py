@@ -130,10 +130,10 @@ def _filter_orders_for_guest(customer_data: Dict[str, Any]) -> pd.DataFrame:
     Returns:
         Filtered orders DataFrame
     """
-    from BackEnd.services.woocommerce_client.fetch_orders import fetch_orders
+    from BackEnd.services.hybrid_data_loader import load_hybrid_data
     
     # Fetch recent orders
-    orders_df = fetch_orders()
+    orders_df = load_hybrid_data(woocommerce_mode="cache_only")
     
     if orders_df is None or orders_df.empty:
         return pd.DataFrame()
@@ -144,11 +144,11 @@ def _filter_orders_for_guest(customer_data: Dict[str, Any]) -> pd.DataFrame:
     # Filter by email or phone
     mask = pd.Series(False, index=orders_df.index)
     
-    if email and "billing_email" in orders_df.columns:
-        mask |= orders_df["billing_email"].str.lower() == email
+    if email and "email" in orders_df.columns:
+        mask |= orders_df["email"].str.lower() == email
     
-    if phone and "billing_phone" in orders_df.columns:
-        mask |= orders_df["billing_phone"].apply(clean_phone) == phone
+    if phone and "phone" in orders_df.columns:
+        mask |= orders_df["phone"].apply(clean_phone) == phone
     
     return orders_df[mask].copy()
 

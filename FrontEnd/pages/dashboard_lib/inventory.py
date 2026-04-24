@@ -34,8 +34,12 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
         
     # --- Real Velocity & Trend Calculation ---
     if df_sales is not None and not df_sales.empty:
-        # Calculate days in selected window
-        days_active = (df_sales["order_date"].max() - df_sales["order_date"].min()).days or 1
+        # Calculate days in selected window safely
+        valid_dates = df_sales["order_date"].dropna()
+        if not valid_dates.empty:
+            days_active = (valid_dates.max() - valid_dates.min()).days or 1
+        else:
+            days_active = 1
         
         # Group sales by SKU
         sku_sales = df_sales.groupby("sku")["qty"].sum().reset_index()

@@ -279,9 +279,6 @@ def inject_base_styles():
                 font-size: 0.6rem !important;
                 word-break: break-word !important;
             }
-            div[data-testid="stMetricDelta"] {
-                display: none !important;
-            }
             div[data-testid="stMetricContainer"] {
                 min-height: auto !important;
                 height: auto !important;
@@ -450,11 +447,11 @@ def premium_metric_card(label: str, value: str, icon: str, help_text: str = "", 
                     {icon}
                 </div>
             </div>
-            <div class="pmc-value" style="font-size: clamp(1.4rem, 3.5vw, 2.2rem); font-weight: 800; color: var(--text-color); line-height: 1.1; margin: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">
+            <div class="pmc-value" style="font-size: clamp(1.4rem, 3.5vw, 2.2rem); font-weight: 800; color: {value_color}; line-height: 1.1; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%;">
                 {value}
             </div>
-            <div class="pmc-help" style="font-size: clamp(0.55rem, 1vw, 0.65rem); color: #94a3b8; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; margin-top: auto;">
-                {help_text}
+            <div class="pmc-footer" style="font-size: clamp(0.55rem, 1vw, 0.65rem); color: #94a3b8; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; margin-top: auto; min-height: 16px; display: flex; justify-content: center; align-items: center;">
+                {footer_content}
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -502,7 +499,8 @@ def small_metric_card(label: str, value: str, icon: str):
                 <div class="smc-label" style="font-size: clamp(0.55rem, 1.2vw, 0.7rem); color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{label}</div>
                 <div class="smc-icon" style="font-size: 0.9rem; opacity: 0.7;">{icon}</div>
             </div>
-            <div class="smc-value" style="font-size: clamp(1.3rem, 3vw, 1.8rem); font-weight: 800; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; margin: 4px 0;">{value}</div>
+            <div class="smc-value" style="font-size: clamp(1.3rem, 3vw, 1.8rem); font-weight: 800; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1; margin: 0;">{value}</div>
+            <div style="margin-top: auto; min-height: 4px;"></div>
         </div>
     """, unsafe_allow_html=True)
 

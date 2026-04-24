@@ -427,6 +427,7 @@ def render_intelligence_hub_page():
     d_aov_label, d_aov_val = calc_delta(aov, prev_aov_val)
 
     def format_compact(num):
+        import pandas as pd
         if pd.isna(num): return "0"
         if num >= 1_000_000: return f"{num/1_000_000:.1f}M".replace(".0M", "M")
         if num >= 1_000: return f"{num/1_000:.1f}K".replace(".0K", "K")

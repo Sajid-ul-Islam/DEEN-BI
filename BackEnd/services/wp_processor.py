@@ -281,9 +281,13 @@ class WhatsAppOrderProcessor:
         phone_col = self.config["phone_col"]
         total_rows = len(df)
 
-        import pyshorteners
-
-        shortener = pyshorteners.Shortener() if shorten_urls else None
+        shortener = None
+        if shorten_urls:
+            try:
+                import pyshorteners
+                shortener = pyshorteners.Shortener()
+            except ImportError:
+                shorten_urls = False
 
         for idx, row in df.iterrows():
             if progress_callback:

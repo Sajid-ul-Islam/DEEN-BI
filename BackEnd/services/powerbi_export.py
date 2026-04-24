@@ -69,14 +69,14 @@ def build_star_schema(data: Dict[str, Any], returns_df: pd.DataFrame) -> Tuple[b
             dim_customer.to_excel(writer, sheet_name='Dim_Customer', index=False)
             
             sales_df = sales_df.merge(dim_customer[['CustomerKey', 'customer_key']], on='customer_key', how='left')
-        elif 'billing_first_name' in sales_df.columns:
-             dim_customer = sales_df[['billing_phone', 'billing_first_name', 'billing_city']].drop_duplicates(subset=['billing_phone'])
+        elif 'phone' in sales_df.columns:
+             dim_customer = sales_df[['phone', 'customer_name', 'city']].drop_duplicates(subset=['phone'])
              dim_customer.reset_index(drop=True, inplace=True)
              dim_customer.index.name = 'CustomerKey'
              dim_customer = dim_customer.reset_index()
              dim_customer.to_excel(writer, sheet_name='Dim_Customer', index=False)
              
-             sales_df = sales_df.merge(dim_customer[['CustomerKey', 'billing_phone']], on='billing_phone', how='left')
+             sales_df = sales_df.merge(dim_customer[['CustomerKey', 'phone']], on='phone', how='left')
 
         # 4. Fact_Sales
         if not sales_df.empty:

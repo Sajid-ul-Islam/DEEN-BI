@@ -27,7 +27,7 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
         c1, c2 = st.columns([1, 2])
         with c1:
             st.metric("Avg. Shipping Time", f"{avg_latency:.1f} Days", 
-                      delta=f"{avg_latency - 3:.1f} vs Target (3d)", delta_color="inverse")
+                      delta=f"{abs(avg_latency - 3):.1f}d vs Target", delta_color="inverse")
             st.caption("Target dispatch: 72 hours.")
         
         with c2:
@@ -87,7 +87,7 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
         low_stock = len(stock_df[stock_df['Stock Quantity'] <= 5])
         
         i1, i2, i3 = st.columns(3)
-        i1.metric("Stock-out Rate", f"{stockout_rate:.1f}%", delta=f"{out_of_stock} SKUs Unavailable", delta_color="inverse")
+        i1.metric("Stock-out Rate", f"{stockout_rate:.1f}%", delta=f"{out_of_stock} OOS", delta_color="inverse")
         i2.metric("Low Stock Alert", f"{low_stock} Items", help="Items with <= 5 units remaining.")
         i3.metric("Inventory Value", f"৳{(stock_df['Stock Quantity'] * stock_df['Price']).sum():,.0f}")
         

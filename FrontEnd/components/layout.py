@@ -101,7 +101,7 @@ def setup_theme():
             color: var(--on-surface-variant);
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            margin-bottom: auto;
+            margin-bottom: 0;
             opacity: 0.7;
             white-space: normal !important;
             overflow: hidden !important;
@@ -115,7 +115,7 @@ def setup_theme():
             color: var(--on-surface);
             letter-spacing: -0.04em;
             line-height: 1.1;
-            margin: 4px 0;
+            margin: 0;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
@@ -708,10 +708,6 @@ def setup_theme():
             }
             [data-testid="stMetricLabel"], .metric-highlight-label {
                 font-size: 0.6rem !important;
-            }
-            /* Hide secondary noise on small screens */
-            [data-testid="stMetricDelta"], .metric-delta, .metric-highlight-delta, .op-card-delta {
-                display: none !important;
             }
             .metric-highlight-help, .metric-icon-wrap, .metric-highlight-icon, .op-card-icon {
                 display: none !important;
