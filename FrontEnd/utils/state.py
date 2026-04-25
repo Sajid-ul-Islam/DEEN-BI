@@ -57,7 +57,6 @@ def save_state():
         "inv_res_data",
         "inv_active_l",
         "inv_t_col",
-        "pathao_res_df",
         "low_stock_threshold",
     ]
 

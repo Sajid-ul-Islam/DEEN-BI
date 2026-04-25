@@ -117,10 +117,10 @@ def get_category_for_sales(name) -> str:
         return "Jeans"
 
     # T-Shirt (Must be before general Shirt)
-    if _has_any(["t-shirt", "t shirt", "tee", "tank top", "tank-top", "active wear", "activewear"], name_str):
+    if _has_any(["t-shirt", "t shirt", "tee", "tank top", "tank-top", "active wear", "activewear", "active-wear", "gym wear"], name_str):
         if _has_any(["drop shoulder"], name_str): return "T-Shirt - Drop Shoulder"
-        if _has_any(["tank top", "tank-top"], name_str): return "T-Shirt - Tank Top"
-        if _has_any(["active wear", "activewear"], name_str): return "T-Shirt - Active Wear"
+        if _has_any(["tank top", "tank-top", "sleeveless"], name_str): return "T-Shirt - Tank Top"
+        if _has_any(["active wear", "activewear", "active-wear", "gym wear"], name_str): return "T-Shirt - Active Wear"
         if _has_any(["jersey", "jersy"], name_str): return "T-Shirt - Jersey"
         
         fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]
@@ -167,9 +167,9 @@ def get_category_for_sales(name) -> str:
         return "Twill Chino - Twill Chino Pant"
 
     # Trousers
-    if _has_any(["trouser", "trousers", "jogger", "joggers", "pant", "pants", "gabardine"], name_str):
+    if _has_any(["trouser", "trousers", "jogger", "joggers", "pant", "pants", "gabardine", "track pant", "track pants"], name_str):
         if _has_any(["regular"], name_str) and _has_any(["fit"], name_str): return "Trousers - Cotton Trousers"
-        if _has_any(["jogger", "joggers"], name_str): return "Trousers - Joggers"
+        if _has_any(["jogger", "joggers", "track pant", "track pants"], name_str): return "Trousers - Joggers"
         return "Trousers - Trousers"
 
     # 3. STATIC / BUNDLES

@@ -573,14 +573,14 @@ def cross_reference_return_items(
                 enhanced_row_items.append(item)
                 continue
 
-            item_name = item.get("name", "").lower().strip()
-            item_size = item.get("size", "").lower().strip()
+            item_name = str(item.get("name") or "").lower().strip()
+            item_size = str(item.get("size") or "").lower().strip()
 
             # Try to match with WooCommerce item
             matched = False
             for _, wc_item in wc_items.iterrows():
-                wc_name = wc_item.get("item_name", "").lower().strip()
-                wc_sku = wc_item.get("sku", "N/A")
+                wc_name = str(wc_item.get("item_name") or "").lower().strip()
+                wc_sku = str(wc_item.get("sku") or "N/A")
 
                 # Match by name similarity or SKU in name
                 if item_name in wc_name or wc_name in item_name or wc_sku.lower() in item_name:
@@ -1127,7 +1127,7 @@ def map_items_to_skus(order_id: str, items: list[dict[str, Any]], sales_df: pd.D
     for item in items:
         # Safety for old string format
         if isinstance(item, dict):
-            name = item.get("name", "Unknown")
+            name = str(item.get("name") or "Unknown")
             item_copy = item.copy()
         else:
             name = str(item)

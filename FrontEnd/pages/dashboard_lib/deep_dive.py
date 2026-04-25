@@ -101,21 +101,46 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
     st.caption(f"Master and Sub-categories ranked by revenue, comparing current vs previous {clean_window.lower()}.")
 
     if not df_sales.empty:
+        # Safely cross-reference return loss per line item to calculate category Net Yield
+        if "Return_Loss" not in df_sales.columns:
+            returns_df = st.session_state.get("returns_data", pd.DataFrame())
+            order_sku_returns = {}
+            if not returns_df.empty and "order_id" in returns_df.columns:
+                for _, r_row in returns_df.iterrows():
+                    if r_row.get("issue_type") in ["Paid Return", "Non Paid Return", "Partial"]:
+                        items = r_row.get("returned_items", [])
+                        oid = str(r_row.get("order_id", ""))
+                        if isinstance(items, list):
+                            for item in items:
+                                if isinstance(item, dict):
+                                    sku = str(item.get("sku", "N/A"))
+                                    impact = item.get("revenue_impact", 0)
+                                    key = f"{oid}_{sku}"
+                                    order_sku_returns[key] = order_sku_returns.get(key, 0) + impact
+            
+            keys = df_sales["order_id"].astype(str) + "_" + df_sales.get("sku", "").astype(str)
+            df_sales["Return_Loss"] = keys.map(order_sku_returns).fillna(0.0)
+
         curr_agg = df_sales.groupby("Category").agg(
             Total_Sold=("qty", "sum"),
-            Total_Revenue=("item_revenue", "sum")
+            Total_Revenue=("item_revenue", "sum"),
+            Return_Loss=("Return_Loss", "sum")
         ).reset_index()
+        curr_agg["ASP"] = (curr_agg["Total_Revenue"] / curr_agg["Total_Sold"].replace(0, 1)).fillna(0)
+        curr_agg["Net_Yield"] = ((curr_agg["Total_Revenue"] - curr_agg["Return_Loss"]) / curr_agg["Total_Revenue"].replace(0, 1) * 100).fillna(100).clip(lower=0, upper=100)
         
         if df_prev is not None and not df_prev.empty:
             prev_agg = df_prev.groupby("Category").agg(
                 Prev_Sold=("qty", "sum"),
                 Prev_Revenue=("item_revenue", "sum")
             ).reset_index()
+            prev_agg["Prev_ASP"] = (prev_agg["Prev_Revenue"] / prev_agg["Prev_Sold"].replace(0, 1)).fillna(0)
             merged = curr_agg.merge(prev_agg, on="Category", how="outer").fillna(0)
         else:
             merged = curr_agg.copy()
             merged["Prev_Sold"] = 0
             merged["Prev_Revenue"] = 0
+            merged["Prev_ASP"] = 0
 
         def format_trend(curr, prev):
             if prev == 0 and curr > 0:
@@ -133,24 +158,29 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
 
         merged["Sold Trend"] = merged.apply(lambda x: format_trend(x["Total_Sold"], x["Prev_Sold"]), axis=1)
         merged["Rev Trend"] = merged.apply(lambda x: format_trend(x["Total_Revenue"], x["Prev_Revenue"]), axis=1)
+        merged["ASP Trend"] = merged.apply(lambda x: format_trend(x["ASP"], x["Prev_ASP"]), axis=1)
         
         merged["Master Category"] = merged["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
         merged["Sub Category"] = merged["Category"].apply(lambda x: str(x).split(" - ")[1] if " - " in str(x) else str(x))
         
         merged = merged.sort_values(["Total_Revenue", "Master Category"], ascending=[False, True])
         
-        display_df = merged[["Master Category", "Sub Category", "Total_Sold", "Sold Trend", "Total_Revenue", "Rev Trend"]].rename(columns={
+        display_df = merged[["Master Category", "Sub Category", "Total_Sold", "Sold Trend", "Total_Revenue", "Rev Trend", "ASP", "ASP Trend", "Net_Yield"]].rename(columns={
             "Total_Sold": "Total Sold",
-            "Total_Revenue": "Total Revenue"
+            "Total_Revenue": "Total Revenue",
+            "Net_Yield": "Net Yield %"
         })
         
         col_cfg = {
-            "Master Category": st.column_config.TextColumn("Master Category", width="medium"),
-            "Sub Category": st.column_config.TextColumn("Sub Category", width="medium"),
+            "Master Category": st.column_config.TextColumn("Master Category", width="small"),
+            "Sub Category": st.column_config.TextColumn("Sub Category", width="small"),
             "Total Sold": st.column_config.NumberColumn("Total Sold", format="%d"),
             "Sold Trend": st.column_config.TextColumn(f"Sold vs Prev {clean_window}"),
             "Total Revenue": st.column_config.NumberColumn("Total Revenue", format="৳%d"),
             "Rev Trend": st.column_config.TextColumn(f"Rev vs Prev {clean_window}"),
+            "ASP": st.column_config.NumberColumn("ASP", format="৳%d"),
+            "ASP Trend": st.column_config.TextColumn(f"ASP vs Prev {clean_window}"),
+            "Net Yield %": st.column_config.ProgressColumn("Net Yield %", format="%.1f%%", min_value=0, max_value=100),
         }
         
         def color_trend(val):
@@ -162,7 +192,7 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
             return ""
 
         styler = display_df.style
-        styled_df = styler.map(color_trend, subset=["Sold Trend", "Rev Trend"]) if hasattr(styler, "map") else styler.applymap(color_trend, subset=["Sold Trend", "Rev Trend"])
+        styled_df = styler.map(color_trend, subset=["Sold Trend", "Rev Trend", "ASP Trend"]) if hasattr(styler, "map") else styler.applymap(color_trend, subset=["Sold Trend", "Rev Trend", "ASP Trend"])
         
         st.dataframe(styled_df, width="stretch", hide_index=True, column_config=col_cfg)
     else:

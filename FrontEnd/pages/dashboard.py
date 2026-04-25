@@ -147,13 +147,14 @@ def _needs_category_enrichment(categories: list[str]) -> bool:
 def _ensure_categories(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
-    if "Category" in df.columns and df["Category"].notna().any():
-        return df
 
     from BackEnd.core.categories import get_category_for_sales
 
     enriched = df.copy()
-    enriched["Category"] = enriched["item_name"].apply(get_category_for_sales)
+    if "sku" in enriched.columns:
+        enriched["Category"] = enriched.apply(lambda x: get_category_for_sales(str(x.get("item_name", "")) + " " + str(x.get("sku", ""))), axis=1)
+    else:
+        enriched["Category"] = enriched["item_name"].apply(get_category_for_sales)
     return enriched
 
 

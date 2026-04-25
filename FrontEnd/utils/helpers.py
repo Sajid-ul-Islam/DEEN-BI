@@ -3,57 +3,12 @@ import re
 
 # --- Category Logic ---
 def get_category_from_name(name):
-    """Categorizes products based on keywords in their names (v9.5 Expert Rules)."""
-    name_str = str(name).lower()
-
-    def has_any(keywords, text):
-        return any(
-            re.search(rf"\b{re.escape(kw.lower())}\b", text, re.IGNORECASE)
-            for kw in keywords
-        )
-
-    specific_cats = {
-        "Tank Top": ["tank top"],
-        "Boxer": ["boxer"],
-        "Jeans": ["jeans"],
-        "Denim Shirt": ["denim"],
-        "Flannel Shirt": ["flannel"],
-        "Polo Shirt": ["polo"],
-        "Panjabi": ["panjabi", "punjabi"],
-        "Trousers": ["trousers", "trouser"],
-        "Joggers": ["joggers", "jogger", "track pant"],
-        "Twill Chino": ["twill chino", "chino", "twill"],
-        "Mask": ["mask"],
-        "Leather Bag": ["bag", "backpack"],
-        "Water Bottle": ["water bottle"],
-        "Contrast Shirt": ["contrast"],
-        "Turtleneck": ["turtleneck", "mock neck"],
-        "Drop Shoulder": ["drop", "shoulder"],
-        "Wallet": ["wallet"],
-        "Kaftan Shirt": ["kaftan"],
-        "Active Wear": ["active wear"],
-        "Jersy": ["jersy"],
-        "Sweatshirt": ["sweatshirt", "hoodie", "pullover"],
-        "Jacket": ["jacket", "outerwear", "coat"],
-        "Belt": ["belt"],
-        "Sweater": ["sweater", "cardigan", "knitwear"],
-        "Passport Holder": ["passport holder"],
-        "Card Holder": ["card holder"],
-        "Cap": ["cap"],
-    }
-
-    for cat, keywords in specific_cats.items():
-        if has_any(keywords, name_str):
-            return cat
-
-    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s"]
-    if has_any(["t-shirt", "t shirt", "tee"], name_str):
-        return "FS T-Shirt" if has_any(fs_keywords, name_str) else "HS T-Shirt"
-
-    if has_any(["shirt"], name_str):
-        return "FS Shirt" if has_any(fs_keywords, name_str) else "HS Shirt"
-
-    return "Others"
+    """
+    Redirects to the master centralized categorization engine to ensure
+    all expert rules (like Active Wear, Trousers, Bundles) are applied globally.
+    """
+    from BackEnd.core.categories import get_category_for_sales
+    return get_category_for_sales(name)
 
 
 # --- Address Logic ---
