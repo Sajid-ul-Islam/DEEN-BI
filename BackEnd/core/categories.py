@@ -18,7 +18,7 @@ def get_category_for_orders(name) -> str:
 
 # Master Category Priority (Determines the 'Flow' in UI Dropdowns)
 CATEGORIES_PRIORITY = [
-    "Jeans", "Jeans - Regular Fit", "Jeans - Slim Fit", "Jeans - Straight Fit",
+    "Jeans - Regular Fit", "Jeans - Slim Fit", "Jeans - Straight Fit",
     "T-Shirt", "T-Shirt - HS T-Shirt", "T-Shirt - FS T-Shirt", "T-Shirt - Drop Shoulder", "T-Shirt - Tank Top", "T-Shirt - Active Wear", "T-Shirt - Jersey",
     "FS Shirt", "FS Shirt - Flannel Shirt", "FS Shirt - Denim Shirt", "FS Shirt - Oxford Shirt", "FS Shirt - Kaftan Shirt", "FS Shirt - Executive Formal Shirt", "FS Shirt - FS Casual Shirt",
     "HS Shirt", "HS Shirt - Contrast Shirt", "HS Shirt - HS Casual Shirt",
@@ -106,10 +106,16 @@ def get_category_for_sales(name) -> str:
     if not name_str:
         return "Others"
 
+    # Replace underscores with spaces to ensure word boundaries (\b) match correctly
+    name_str = name_str.replace('_', ' ')
+
+    # Separate alphabets from numbers to catch joined SKUs (e.g. jn02 -> jn 02)
+    name_str = re.sub(r'([a-z]+)(\d+)', r'\1 \2', name_str)
+
     # 1. HIGH PRIORITY SPECIAL CATEGORIES (Check before 'Shirt' overlap)
     
     # Sweatshirt 
-    if _has_any(["sweatshirt", "hoodie", "pullover"], name_str):
+    if _has_any(["sweatshirt", "hoodie", "pullover", "sw", "hd"], name_str):
         if _has_any(["cotton terry"], name_str): return "Sweatshirt - Cotton Terry Sweatshirt"
         if _has_any(["french terry"], name_str): return "Sweatshirt - French Terry Sweatshirt"
         return "Sweatshirt"
@@ -125,14 +131,14 @@ def get_category_for_sales(name) -> str:
     # 2. MAIN CLUSTERS
 
     # Jeans
-    if _has_any(["jeans", "denim pant", "denim pants", "denim long"], name_str):
+    if _has_any(["jeans", "denim pant", "denim pants", "denim long", "jn"], name_str) or (_has_any(["denim"], name_str) and not _has_any(["shirt", "jacket"], name_str)):
         if _has_any(["regular"], name_str): return "Jeans - Regular Fit"
         if _has_any(["slim"], name_str): return "Jeans - Slim Fit"
         if _has_any(["straight"], name_str): return "Jeans - Straight Fit"
-        return "Jeans"
+        return "Jeans - Regular Fit"
 
     # T-Shirt (Must be before general Shirt)
-    if _has_any(["t-shirt", "t shirt", "tee", "tank top", "tanktop", "tank", "active wear", "activewear", "jersey", "jersy", "drop shoulder", "oversized", "oversize", "crewneck", "crew neck", "v-neck", "henley"], name_str):
+    if _has_any(["t-shirt", "t shirt", "tee", "tank top", "tanktop", "tank", "active wear", "activewear", "jersey", "jersy", "drop shoulder", "oversized", "oversize", "crewneck", "crew neck", "v-neck", "henley", "ts"], name_str):
         if _has_any(["drop shoulder", "oversized", "oversize"], name_str): return "T-Shirt - Drop Shoulder"
         if _has_any(["tank top", "tanktop", "tank"], name_str): return "T-Shirt - Tank Top"
         if _has_any(["active wear", "activewear"], name_str): return "T-Shirt - Active Wear"
@@ -143,8 +149,8 @@ def get_category_for_sales(name) -> str:
         return "T-Shirt - HS T-Shirt"
 
     # FS Shirt
-    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s", "full-sleeve"]
-    is_shirt = _has_any(["shirt", "overshirt"], name_str)
+    fs_keywords = ["full sleeve", "long sleeve", "fs", "l/s", "full-sleeve", "full"]
+    is_shirt = _has_any(["shirt", "overshirt", "sh"], name_str)
     
     # Force certain types into FS Shirt even if 'full sleeve' is missing
     if is_shirt and (_has_any(fs_keywords, name_str) or _has_any(["flannel", "denim", "oxford", "kaftan", "executive", "formal", "linen", "corduroy"], name_str)):
@@ -163,7 +169,7 @@ def get_category_for_sales(name) -> str:
         return "HS Shirt"
 
     # Wallet
-    if _has_any(["wallet", "card holder", "passport holder"], name_str):
+    if _has_any(["wallet", "card holder", "passport holder", "wl"], name_str):
         if _has_any(["passport"], name_str): return "Wallet - Passport Holder"
         if _has_any(["card"], name_str): return "Wallet - Card Holder"
         if _has_any(["long"], name_str): return "Wallet - Long Wallet"
@@ -172,18 +178,18 @@ def get_category_for_sales(name) -> str:
         return "Wallet"
 
     # Panjabi
-    if _has_any(["panjabi", "punjabi", "fatua", "kurta", "kameez", "kabli"], name_str):
+    if _has_any(["panjabi", "punjabi", "fatua", "kurta", "kameez", "kabli", "pj"], name_str):
         if _has_any(["embroidered cotton", "embroidered", "embroidery"], name_str): return "Panjabi - Embroidered Panjabi"
         return "Panjabi - Panjabi"
 
     # Twill Chino
-    if _has_any(["twill", "chino", "chinos"], name_str):
+    if _has_any(["twill", "chino", "chinos", "tw"], name_str):
         if _has_any(["jogger"], name_str): return "Twill - Twill Joggers"
         if _has_any(["five pocket", "5 pocket", "5-pocket"], name_str): return "Twill - Five Pockets"
         return "Twill - Twill Chino"
 
     # Trousers
-    if _has_any(["trouser", "trousers", "jogger", "joggers", "pants", "pant", "gabardine", "cargo", "cargos", "sweatpant", "sweatpants", "track pant", "track pants"], name_str):
+    if _has_any(["trouser", "trousers", "jogger", "joggers", "pants", "pant", "gabardine", "cargo", "cargos", "sweatpant", "sweatpants", "track pant", "track pants", "tr"], name_str):
         if _has_any(["french terry"], name_str): return "Trousers - French Terry Trousers"
         if _has_any(["regular", "fit"], name_str) and not _has_any(["jogger", "joggers", "cargo", "cargos"], name_str): return "Trousers - Cotton Trousers"
         if _has_any(["jogger", "joggers"], name_str): return "Trousers - Joggers"
@@ -206,14 +212,14 @@ def get_category_for_sales(name) -> str:
         return "Co-ords"
 
     specific_cats = {
-        "Boxer": ["boxer", "underwear", "brief", "trunk"],
+        "Boxer": ["boxer", "underwear", "brief", "trunk", "bx"],
         "Leather Bag": ["bag", "backpack", "tote", "purse", "messenger", "sling", "crossbody"],
         "Mask": ["mask"],
         "Water Bottle": ["bottle", "flask", "tumbler"],
-        "Belt": ["belt"],
-        "Jacket": ["jacket", "outerwear", "coat", "windbreaker", "blazer", "shacket", "bomber"],
-        "Sweater": ["sweater", "cardigan", "knitwear", "jumper"],
-        "Cap": ["cap", "hat", "beanie"],
+        "Belt": ["belt", "bl"],
+        "Jacket": ["jacket", "outerwear", "coat", "windbreaker", "blazer", "shacket", "bomber", "jk"],
+        "Sweater": ["sweater", "cardigan", "knitwear", "jumper"], # 'sw' is for Sweatshirt
+        "Cap": ["cap", "hat", "beanie", "cp"],
         "Shorts": ["short", "shorts", "half pant", "swim trunk"],
         "Socks": ["sock", "socks", "anklet"],
         "Footwear": ["shoe", "shoes", "sneaker", "sneakers", "sandal", "sandals", "slipper", "slippers", "loafer", "loafers", "boot", "boots", "slides", "slide"],

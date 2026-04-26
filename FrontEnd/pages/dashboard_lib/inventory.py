@@ -36,6 +36,10 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
     # 1. Consolidated Data Pre-processing
     inventory = stock_df.copy()
     
+    # Remove parent variable products to prevent them from hiding variations or showing 0 stock
+    if "Product Type" in inventory.columns:
+        inventory = inventory[inventory["Product Type"] != "variable"]
+
     # Initialize missing pillars for pricing
     for col in ["Regular Price", "Sale Price", "Price"]:
         if col not in inventory.columns:
@@ -159,35 +163,22 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
         inventory["Sale Value"] = inventory["Stock Quantity"] * inventory["Sale Price"]
 
         # 2. Controls for dynamic visualization
-        c_filter1, c_filter2 = st.columns([1, 2])
-        with c_filter1:
-            val_basis = st.radio(
-                "Value Basis", 
-                ["Market Value", "Regular Value", "Sale Value"], 
-                index=0,
-                horizontal=True
-            )
-        with c_filter2:
-            group_basis = st.radio(
-                "Aggregation Level",
-                ["Main Category", "Sub-Category", "Master Product", "Variant"],
-                index=1,
-                horizontal=True
-            )
+        group_basis = st.radio(
+            "Aggregation Level",
+            ["Main Category", "Sub-Category", "Master Product", "Variant"],
+            index=1,
+            horizontal=True
+        )
         
-        val_col_map = {
-            "Market Value": "Value",
-            "Regular Value": "Regular Value",
-            "Sale Value": "Sale Value"
-        }
-        val_col = val_col_map.get(val_basis, "Value")
+        val_basis = "Market Value"
+        val_col = "Value"
 
         # 3. Data Preparation
         valid_cats = list(get_master_category_list())
         inventory["Category"] = np.where(inventory["Category"].isin(valid_cats), inventory["Category"], "Others")
         inventory["Main Category"] = inventory["Category"].astype(str).str.split(" - ").str[0]
         inventory["Sub Category"] = inventory["Category"].apply(get_subcategory_name)
-        inventory["Master Product"] = inventory["_clean_name"] + " [" + inventory["SKU"].astype(str) + "]"
+        inventory["Master Product"] = inventory["_clean_name"]
         inventory["Variant"] = inventory["Name"]
         
         # Apply active filters to the strategic analysis
@@ -211,13 +202,15 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
         group_col = group_col_map.get(group_basis, "Sub Category")
         group_label = group_basis
 
-        cat_agg = filtered_inv.groupby(group_col).agg(
+        # Include items marked as 'instock' to prevent variable parent products (which often have 0 stock) from vanishing
+        in_stock_inv = filtered_inv[(filtered_inv["Stock Quantity"] > 0) | (filtered_inv["Stock Status"].astype(str).str.lower().str.strip() == "instock")]
+        cat_agg = in_stock_inv.groupby(group_col).agg(
             Selected_Value=(val_col, "sum"),
             Total_Units=("Stock Quantity", "sum"),
             SKU_Count=("Name", "count")
         ).reset_index()
         
-        cat_agg = cat_agg.rename(columns={group_col: "Display Category"})
+        cat_agg = cat_agg.rename(columns={group_col: group_label})
         
         # Independent limits for each metric so Volume isn't restricted by Value
         # Show all for Categories, limit for Products/Variants to keep charts readable
@@ -233,14 +226,14 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
         with t1:
             v1, v2 = st.columns(2)
             with v1:
-                fig_unit_bar = ui.bar_chart(top_unit_df, x="Total_Units", y="Display Category", title=f"Total Unit Volume per {group_label}", color="Total_Units")
+                fig_unit_bar = ui.bar_chart(top_unit_df, x="Total_Units", y=group_label, title=f"Total Unit Volume per {group_label}", color="Total_Units")
                 fig_unit_bar.update_traces(texttemplate="%{x:,} Units", textposition="auto")
-                fig_unit_bar.update_layout(height=max(450, len(top_unit_df) * 30))
+                fig_unit_bar.update_layout(height=max(450, len(top_unit_df) * 30), yaxis_title=group_label)
                 st.plotly_chart(fig_unit_bar, width="stretch")
             with v2:
-                fig_val_bar = ui.bar_chart(top_val_df, x="Selected_Value", y="Display Category", title=f"Absolute {val_basis} per {group_label}", color="Selected_Value")
+                fig_val_bar = ui.bar_chart(top_val_df, x="Selected_Value", y=group_label, title=f"Absolute {val_basis} per {group_label}", color="Selected_Value")
                 fig_val_bar.update_traces(texttemplate="৳%{x:,.0f}", textposition="auto")
-                fig_val_bar.update_layout(height=max(450, len(top_val_df) * 30))
+                fig_val_bar.update_layout(height=max(450, len(top_val_df) * 30), yaxis_title=group_label)
                 st.plotly_chart(fig_val_bar, width="stretch")
                 
             st.divider()
@@ -251,18 +244,18 @@ def render_inventory_health(stock_df: pd.DataFrame, forecast_df: pd.DataFrame, d
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Display Category": st.column_config.TextColumn(group_label),
+                    group_label: st.column_config.TextColumn(group_label),
                     "Selected_Value": st.column_config.NumberColumn(val_basis, format="৳%.0f"),
                     "Total_Units": st.column_config.NumberColumn("Total Units", format="%d"),
-                    "SKU_Count": st.column_config.NumberColumn("Unique SKUs", format="%d")
+                    "SKU_Count": st.column_config.NumberColumn("In-Stock SKUs", format="%d")
                 }
             )
 
         with t2:
-            breadth_label = "Variants" if group_basis == "Variant" else "SKUs"
-            fig_sku_bar = ui.bar_chart(top_sku_df, x="SKU_Count", y="Display Category", title=f"{breadth_label} Breadth per {group_label}", color="SKU_Count")
+            breadth_label = "In-Stock Variants" if group_basis == "Variant" else "In-Stock SKUs"
+            fig_sku_bar = ui.bar_chart(top_sku_df, x="SKU_Count", y=group_label, title=f"{breadth_label} Breadth per {group_label}", color="SKU_Count")
             fig_sku_bar.update_traces(texttemplate=f"%{{x:,}} {breadth_label}", textposition="auto")
-            fig_sku_bar.update_layout(height=max(450, len(top_sku_df) * 30))
+            fig_sku_bar.update_layout(height=max(450, len(top_sku_df) * 30), xaxis_title=breadth_label, yaxis_title=group_label)
             st.plotly_chart(fig_sku_bar, width="stretch")
 
         with t3:

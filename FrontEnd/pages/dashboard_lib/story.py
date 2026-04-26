@@ -139,13 +139,12 @@ def render_dashboard_story(df_sales: pd.DataFrame, df_customers: pd.DataFrame, m
 
     # 8. Interactive Discovery Tools (Icon Bar - Now on Next Line)
     # Ensure icons appear if any insight is available (VIP Churn)
+    at_risk_vips = pd.DataFrame()
     at_risk_count = 0
     if not df_customers.empty and "segment" in df_customers.columns and "recency_days" in df_customers.columns:
         vip_df = df_customers[df_customers["segment"] == "VIP"]
         at_risk_vips = vip_df[vip_df["recency_days"] > 21].copy()
         at_risk_count = len(at_risk_vips)
-    else:
-        at_risk_vips = pd.DataFrame()
         
     has_insights = at_risk_count > 0
     

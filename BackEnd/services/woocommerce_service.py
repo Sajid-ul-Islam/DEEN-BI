@@ -4,6 +4,7 @@ import streamlit as st
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
+import concurrent.futures
 
 
 def get_woocommerce_credentials() -> dict[str, str]:
@@ -274,6 +275,7 @@ class WooCommerceService:
             return pd.DataFrame()
             
         all_products = []
+        variable_product_ids = []
         page = 1
         per_page = 50
         
@@ -296,6 +298,10 @@ class WooCommerceService:
             for p in products:
                 stock_quantity = p.get("stock_quantity")
                 stock_status = p.get("stock_status") or ("instock" if stock_quantity not in (None, "", 0) else "unknown")
+                
+                if p.get("type") == "variable":
+                    variable_product_ids.append(p.get("id"))
+                    
                 all_products.append({
                     "ID": p.get("id"),
                     "Name": p.get("name"),
@@ -316,6 +322,74 @@ class WooCommerceService:
             page += 1
             if page > 200: break # Safety cap
             
+        # Second pass: Fetch variation-level stock data for all variable products concurrently
+        if variable_product_ids:
+            parent_name_lookup = {p["ID"]: p["Name"] for p in all_products}
+            parent_cat_lookup = {p["ID"]: p["Category"] for p in all_products}
+
+            def fetch_variations(pid):
+                import time
+                var_list = []
+                v_page = 1
+                retries = 0
+                while True:
+                    try:
+                        v_response = self.wcapi.get(f"products/{pid}/variations", params={"page": v_page, "per_page": 100})
+                        if v_response.status_code == 429 or v_response.status_code >= 500:
+                            if retries < 3:
+                                retries += 1
+                                time.sleep(2 ** retries)
+                                continue
+                            break
+                        if v_response.status_code != 200: break
+                        
+                        variations = v_response.json()
+                        if not variations: break
+                            
+                        for v in variations:
+                            v_stock = v.get("stock_quantity")
+                            v_status = v.get("stock_status") or ("instock" if v_stock not in (None, "", 0) else "unknown")
+                            attr_str = " - ".join([str(attr.get("option", "")) for attr in v.get("attributes", [])])
+                            parent_name = parent_name_lookup.get(pid, f"Product {pid}")
+                            var_name = f"{parent_name} - {attr_str}" if attr_str else parent_name
+                            parent_cat = parent_cat_lookup.get(pid, "Unknown")
+                            
+                            var_list.append({
+                                "ID": v.get("id"),
+                                "Name": var_name,
+                                "SKU": v.get("sku"),
+                                "Stock Status": v_status,
+                                "Stock Quantity": v_stock or 0,
+                                "Price": float(v.get("price", 0)) if v.get("price") else 0,
+                                "Regular Price": float(v.get("regular_price", 0)) if v.get("regular_price") else 0,
+                                "Sale Price": float(v.get("sale_price", 0)) if v.get("sale_price") else 0,
+                                "Category": parent_cat,
+                                "Manage Stock": bool(v.get("manage_stock")),
+                                "Product Type": "variation",
+                            })
+                            
+                        v_total_pages = int(v_response.headers.get('x-wp-totalpages', 1))
+                        if v_page >= v_total_pages: break
+                        v_page += 1
+                        retries = 0
+                    except Exception:
+                        if retries < 3:
+                            retries += 1
+                            time.sleep(2 ** retries)
+                            continue
+                        break
+                return var_list
+
+            # Use a smaller worker pool to prevent WP firewall rate limiting
+            if self.ui_enabled and variable_product_ids:
+                # Notify the user on the frontend so they know background threads are running
+                st.toast(f"⏳ Resolving exact inventory for {len(variable_product_ids)} complex variation groups...", icon="🔄")
+                
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                for result in executor.map(fetch_variations, variable_product_ids):
+                    if result:
+                        all_products.extend(result)
+
         return pd.DataFrame(all_products)
 
     def fetch_orders_range(self, start_date: Any, end_date: Any) -> pd.DataFrame:

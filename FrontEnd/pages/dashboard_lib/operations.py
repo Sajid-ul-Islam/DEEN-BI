@@ -64,10 +64,11 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
 
     # Weekly Refund Trend
     if 'order_date' in df.columns and 'order_status' in df.columns and 'order_id' in df.columns:
-        df['week'] = df['order_date'].dt.to_period('W').apply(lambda r: r.start_time)
-        weekly_refunds = df.groupby('week').apply(
-            lambda x: (x[x['order_status'].str.lower() == 'refunded']['order_id'].nunique() / x['order_id'].nunique() * 100) if x['order_id'].nunique() > 0 else 0
-        ).reset_index()
+        df['week'] = df['order_date'].dt.to_period('W').dt.start_time
+        df['is_refunded'] = df['order_status'].astype(str).str.lower() == 'refunded'
+        weekly_totals = df.groupby('week')['order_id'].nunique()
+        weekly_refunded = df[df['is_refunded']].groupby('week')['order_id'].nunique()
+        weekly_refunds = (weekly_refunded / weekly_totals * 100).fillna(0).reset_index()
         weekly_refunds.columns = ['Week', 'Refund Rate']
         
         fig_ref = px.line(weekly_refunds, x='Week', y='Refund Rate', title="Weekly Refund Rate Trend",
@@ -83,10 +84,10 @@ def render_operational_health(df_sales: pd.DataFrame, stock_df: pd.DataFrame):
     
     if not stock_df.empty:
         total_skus = len(stock_df)
-        out_of_stock = len(stock_df[stock_df['Stock Status'] == 'outofstock'])
+        out_of_stock = int((stock_df['Stock Status'] == 'outofstock').sum())
         stockout_rate = (out_of_stock / total_skus * 100) if total_skus > 0 else 0
         
-        low_stock = len(stock_df[stock_df['Stock Quantity'] <= 5])
+        low_stock = int((stock_df['Stock Quantity'] <= 5).sum())
         
         i1, i2, i3 = st.columns(3)
         with i1: ui.icon_metric("Stock-out Rate", f"{stockout_rate:.1f}%", icon="📉", delta=f"{out_of_stock} OOS", delta_val=-out_of_stock, delta_color="inverse")

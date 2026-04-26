@@ -119,6 +119,7 @@ def _get_customer_data(
         "last_order": row.get("last_order_date") or row.get("last_order"),
         "return_count": row.get("return_count", 0),
         "return_rate": row.get("return_rate", 0.0),
+        "rel_score": row.get("rel_score"),
     }
 
 

@@ -598,8 +598,13 @@ def cross_reference_return_items(
                 item["transaction_type"] = "exchange"
                 item["revenue_impact"] = 0  # No revenue deduction
             elif issue_type == "Partial":
+                partial_amount_on_order = row.get("partial_amount", 0.0)
                 item["transaction_type"] = "partial_return"
-                item["revenue_impact"] = item.get("price", 0) * item.get("qty", 1) * 0.5  # Estimate 50%
+                # If a specific partial amount is on the order and there's only one item, use it.
+                if partial_amount_on_order > 0 and len(returned_items) == 1:
+                    item["revenue_impact"] = partial_amount_on_order
+                else: # Fallback to 50% estimate per item if amount is split or not specified
+                    item["revenue_impact"] = item.get("price", 0) * item.get("qty", 1) * 0.5
             elif issue_type in ["Paid Return", "Non Paid Return"]:
                 item["transaction_type"] = "full_return"
                 item["revenue_impact"] = item.get("price", 0) * item.get("qty", 1)
