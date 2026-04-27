@@ -209,15 +209,11 @@ def render_returns_tracker_page() -> None:
     ])
 
     with tab_dash:
-        show_exact = st.session_state.get("global_show_exact", False)
+        show_exact = st.session_state.get("returns_show_exact", False)
 
         # ── KPI Cards ──
         _render_kpi_cards(metrics, show_exact=show_exact)
         _render_financial_impact_summary(metrics, show_exact=show_exact)
-
-        t_col1, t_col2 = st.columns([8, 2])
-        with t_col2:
-            st.toggle("Show Exact Values", key="global_show_exact")
 
         if df.empty:
             st.info("No returns logged within this specific time frame.")
