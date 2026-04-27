@@ -131,7 +131,7 @@ def render_returns_tracker_page() -> None:
     with c1:
         st.markdown("### 🔄 Returns Insights")
     with c2:
-        if st.button("🔄 Force Refresh", use_container_width=True):
+        if st.button("🔄 Force Refresh", use_container_width=True, key=KeyManager.get_key("returns", "force_refresh_btn")):
             # Clear cache and state to trigger a fresh background sync
             load_returns_data.clear()
             st.session_state.pop("returns_data", None)
