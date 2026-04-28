@@ -116,9 +116,7 @@ def _render_workspace_sidebar():
 
         # 2. Unified Navigation (Single Stack for Smooth Performance)
         st.markdown('<div class="sidebar-group-label">⚡ NAVIGATION HUB</div>', unsafe_allow_html=True)
-        
-        ins_label = "📦 Stock Insight"
-        
+
         nav_map = {
             "💎 Sales Overview": "💎 Sales Overview",
             "📥 Sales Data Ingestion": "📥 Sales Data Ingestion",
