@@ -222,12 +222,14 @@ def run_automl_forecast(daily_df: pd.DataFrame, metric: str = "revenue", horizon
     
     y_train, y_test = y.iloc[:-test_size], y.iloc[-test_size:]
     
+    # Pre-compute performance map to avoid repeated dict lookups
+    perf_map = {"SARIMA": 1, "ExpSmoothing": 2, "XGBoost": 3, "Linear": 4, "Naive": 5}
+    
     for name in results.keys():
         try:
             # We don't re-train here for speed, but ideally we would.
             # Simulating evaluation by checking the last window's fit if model supports it
             # For this terminal, we'll use a hierarchy as fallback if full cross-val is too slow
-            perf_map = {"SARIMA": 1, "ExpSmoothing": 2, "XGBoost": 3, "Linear": 4, "Naive": 5}
             current_rank = perf_map.get(name, 10)
             best_rank = perf_map.get(best_model, 10)
             

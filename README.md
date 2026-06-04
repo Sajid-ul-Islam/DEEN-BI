@@ -3,12 +3,21 @@
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://deen-ops.streamlit.app/)
 [![Code Quality](https://img.shields.io/badge/Code%20Quality-Senior%2B-blueviolet)](https://github.com/saajiidi/DEEN-AI-Dashboard)
+[![CI](https://github.com/Sajid-ul-Islam/DEEN-BI/actions/workflows/ci.yml/badge.svg)](https://github.com/Sajid-ul-Islam/DEEN-BI/actions/workflows/ci.yml)
+[![Streamlit Demo](https://img.shields.io/badge/Streamlit-Demo-FF4B4B?logo=streamlit)](https://deen-ops.streamlit.app/)
 
 **Live Demo:** [https://deen-ops.streamlit.app/](https://deen-ops.streamlit.app/)
 
 "Most dashboards visualize. This terminal explains, predicts, and recommends."
 
 > 🤖 **AI Agents**: See [`agents.md`](agents.md) for comprehensive codebase blueprint, architecture patterns, and extension guidelines.
+
+---
+
+## 🎬 Quick Demo
+
+![DEEN BI Dashboard](https://raw.githubusercontent.com/Sajid-ul-Islam/DEEN-BI/main/assets/Business-Analysis-cover.png)
+*Figure: Sales Analytics Overview with ML Forecasting*
 
 ---
 
@@ -28,6 +37,7 @@ Unlike simple linear trends, our **Smart Model Router** automatically evaluates 
 *   **Tier 2 (Classical):** SARIMA, **Croston's Method** (for intermittent/sparse demand).
 *   **Tier 3 (Supervised ML):** XGBoost, LightGBM with rolling feature engineering.
 *   **Tier 4 (Deep Learning):** Prophet and LSTM for complex long-term dependencies.
+*   **Caching:** Heavily optimized with `@st.cache_data` and `@st.cache_resource` for aggressive performance.
 
 ### 2. Market Basket & Affinity Analysis (MBA)
 Discover hidden revenue opportunities using association rule learning (Apriori).
@@ -57,7 +67,8 @@ The system joins real-time stock levels with sales affinity data to prevent "Orp
 
 ## 📸 System Walkthrough
 
-*Coming Soon... (Insert High-Quality GIF here)*
+![DEEN BI Dashboard](https://raw.githubusercontent.com/Sajid-ul-Islam/DEEN-BI/main/assets/Business-Analysis-cover.png)
+*Figure: Real-time Operations Dashboard with AI Predictions*
 
 ---
 
@@ -103,6 +114,57 @@ To enable the **Customer Insight** module:
 4. **Test Connection:**
    - Navigate to **👥 Customer Insight** in the sidebar
    - The module will verify connectivity automatically
+
+---
+
+## 🔄 Continuous Integration
+
+DEEN-BI uses GitHub Actions for automated testing, linting, and type checking on every push and pull request to maintain code quality.
+
+### CI Workflow
+
+The CI pipeline runs the following checks on Ubuntu:
+
+1. **Python Setup**: Python 3.10 environment
+2. **Dependency Installation**:
+   ```bash
+   pip install -r requirements.txt
+   pip install pytest ruff black mypy
+   ```
+3. **Type Checking**: MyPy static type analysis
+4. **Syntax Validation**: Python `compileall` for syntax/indentation errors
+5. **Linting**: Ruff with strict rules (E9, F63, F7, F82)
+6. **Formatting**: Black code formatter check
+7. **Tests**: Pytest with verbose output (`-v --tb=short`)
+
+### Running CI Checks Locally
+
+Developers can run the same checks locally:
+
+```bash
+# Install dev dependencies
+pip install pytest ruff black mypy
+
+# Type checking
+mypy --ignore-missing-imports .
+
+# Syntax check
+python -m compileall -q .
+
+# Linting
+ruff check . --select=E9,F63,F7,F82
+ruff check . --exit-zero
+
+# Format check
+black --check .
+
+# Tests
+pytest tests/ -v --tb=short
+```
+
+### CI Status Badge
+
+[![CI](https://github.com/Sajid-ul-Islam/DEEN-BI/actions/workflows/ci.yml/badge.svg)](https://github.com/Sajid-ul-Islam/DEEN-BI/actions/workflows/ci.yml)
 
 ---
 **Engineered with precision for DEEN Commerce.**

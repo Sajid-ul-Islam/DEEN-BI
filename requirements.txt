@@ -10,3 +10,7 @@ numpy
 streamlit
 statsmodels
 sqlparse
+mypy
+pytest
+ruff
+black

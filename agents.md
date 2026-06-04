@@ -1,7 +1,7 @@
 # DEEN Commerce BI - AI Agent Coder Guide
 
 > **Purpose**: Comprehensive blueprint for AI agents to understand, navigate, and extend this codebase.
-> **Last Updated**: 2026-04-24
+> **Last Updated**: 2026-06-04
 > **Project**: DEEN Commerce Business Intelligence Dashboard
 > **Auto-Update**: This file is automatically updated via pre-commit hooks and GitHub Actions
 
@@ -421,6 +421,13 @@ pytest tests/ -v
 - **Removed Text Parsers**: Deleted `wp_tab.py` and `fuzzy_parser_tab.py` to reduce technical debt and simplify the operations module.
 - **Purged Dead States**: Cleaned up the session state manager to prevent holding memory for obsolete dataframes.
 
+### 2026-06-04: CI/CD Pipeline Enhancements
+- **Job Renaming**: Renamed CI job from `test` to `lint-and-test` for better clarity on job scope.
+- **Type Checking**: Added MyPy static type checking (`mypy --ignore-missing-imports .`) to the CI pipeline.
+- **Dependency Updates**: Added `mypy`, `ruff`, and `black` to `requirements.txt` for local development consistency.
+- **Test Improvements**: Added verbose output flags (`-v --tb=short`) to pytest for better debugging.
+- **Workflow Cleanup**: Removed redundant comments and optimized Ruff linting steps.
+
 ### 2026-04-23: Global UI/UX Overhaul & Stability Matrix
 - **Premium UI Framework**: Injected global CSS for glassmorphism, hover-lift animations, and standardized inputs (`st.selectbox`, `st.dataframe`, download buttons).
 - **Vectorized Pandas Logic**: Replaced iterative `.apply()` loops with `np.select` and `np.where` in Inventory and Strategic intelligence to resolve "ambiguous truth value" crashes.
@@ -752,7 +759,27 @@ This `agents.md` file is **automatically maintained** by an update system that k
 - ✅ Project structure (scanned from codebase)
 - ✅ File counts and module lists
 
-### 16.3 For AI Agents
+### 16.3 CI/CD Integration
+
+**Continuous Integration**: The `.github/workflows/ci.yml` file defines automated quality checks:
+
+- **Type Checking**: MyPy static analysis (added 2026-06-04)
+- **Linting**: Ruff with strict rules (E9, F63, F7, F82)
+- **Formatting**: Black code style validation
+- **Testing**: Pytest with verbose output (`-v --tb=short`)
+
+**For AI Agents**: When making code changes, run these checks locally before committing:
+
+```bash
+pip install mypy pytest ruff black
+mypy --ignore-missing-imports .
+ruff check . --select=E9,F63,F7,F82
+ruff check . --exit-zero
+black --check .
+pytest tests/ -v --tb=short
+```
+
+### 16.4 For AI Agents
 
 > **Note to AI Agents**: You don't need to manually update this file. The system handles it automatically. However, if you make significant architectural changes, you may want to:
 > 
