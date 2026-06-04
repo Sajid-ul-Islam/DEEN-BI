@@ -65,7 +65,7 @@ The system joins real-time stock levels with sales affinity data to prevent "Orp
 
 1. **Clone & Install:**
    ```bash
-   git clone https://github.com/saajiidi/DEEN-AI-Dashboard.git
+   git clone https://github.com/Sajid-ul-Islam/DEEN-BI.git
    pip install -r requirements.txt
    ```
 2. **Configure Secrets:**
