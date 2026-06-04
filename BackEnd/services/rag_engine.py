@@ -6,78 +6,22 @@ import hashlib
 import streamlit as st
 from typing import List, Dict, Any
 from pathlib import Path
+from langchain_community.vectorstores import FAISS
+from langchain_core.documents import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import DirectoryLoader, CSVLoader, UnstructuredExcelLoader
 from BackEnd.core.logging_config import get_logger
 
 logger = get_logger("rag_engine")
 
-class SimpleVectorStore:
-    """In-memory numpy-based vector store for lightweight RAG."""
-    def __init__(self):
-        self.cache_dir = Path("BackEnd/cache/vector_store")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.vec_file = self.cache_dir / "vectors.npy"
-        self.norm_file = self.cache_dir / "vectors_norm.npy"
-        self.doc_file = self.cache_dir / "documents.json"
-        
-        self.documents: List[Dict[str, Any]] = []
-        self.vectors: np.ndarray = np.array([])
-        self.vectors_norm: np.ndarray = np.array([])
-        self.load()
-
-    def load(self):
-        if self.vec_file.exists() and self.norm_file.exists() and self.doc_file.exists():
-            try:
-                self.vectors = np.load(self.vec_file)
-                self.vectors_norm = np.load(self.norm_file)
-                with open(self.doc_file, 'r', encoding='utf-8') as f:
-                    self.documents = json.load(f)
-            except Exception as e:
-                logger.error(f"Failed to load vector store: {e}")
-                
-    def save(self):
-        np.save(self.vec_file, self.vectors)
-        np.save(self.norm_file, self.vectors_norm)
-        with open(self.doc_file, 'w', encoding='utf-8') as f:
-            json.dump(self.documents, f, ensure_ascii=False)
-
-    def add_documents(self, documents: List[Dict[str, Any]], embeddings: np.ndarray):
-        if not documents:
-            return
-        self.documents.extend(documents)
-        if self.vectors.size == 0:
-            self.vectors = embeddings
-        else:
-            self.vectors = np.vstack([self.vectors, embeddings])
-            
-        # Pre-compute normalized vectors for O(1) distance scaling during search
-        norms = np.linalg.norm(self.vectors, axis=1, keepdims=True)
-        norms[norms == 0] = 1  # Avoid division by zero
-        self.vectors_norm = self.vectors / norms
-        self.save()
-
-    def search(self, query_embedding: np.ndarray, top_k: int = 5) -> List[Dict[str, Any]]:
-        if self.vectors.size == 0:
-            return []
-        
-        # Cosine similarity: dot product of normalized vectors
-        q_norm = np.linalg.norm(query_embedding)
-        query_norm = query_embedding / (q_norm if q_norm != 0 else 1)
-        similarities = np.dot(self.vectors_norm, query_norm)
-        
-        # Fast top-K extraction using argpartition instead of full argsort
-        if len(similarities) > top_k:
-            top_indices = np.argpartition(similarities, -top_k)[-top_k:]
-            top_indices = top_indices[np.argsort(similarities[top_indices])][::-1]
-        else:
-            top_indices = np.argsort(similarities)[::-1]
-        
-        results = []
-        for idx in top_indices:
-            doc = self.documents[idx].copy()
-            doc["score"] = similarities[idx]
-            results.append(doc)
-            
-        return results
+class LangChainEmbeddingWrapper:
+    """Wrapper to make existing embedding logic compatible with LangChain."""
+    def __init__(self, agent):
+        self.agent = agent
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self.agent._get_embeddings(texts).tolist()
+    def embed_query(self, text: str) -> List[float]:
+        return self.agent._get_embeddings([text])[0].tolist()
 
 class RAGAgent:
     """Retrieval-Augmented Generation Agent for Data Pilot."""
@@ -86,9 +30,12 @@ class RAGAgent:
         self.model_name = model_name
         self.base_url = base_url.rstrip('/')
         self.agent_type = agent_type
-        self.vector_store = SimpleVectorStore()
+        self.vector_store_path = Path("BackEnd/cache/faiss_index")
+        self.vector_store = None
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         import os
         self._api_key = (st.secrets.get("GEMINI_API_KEY") or st.secrets.get("llm", {}).get("gemini_key") or os.environ.get("GEMINI_API_KEY")) if agent_type == "Google Gemini" else None
+        self.embeddings = LangChainEmbeddingWrapper(self)
 
     def _load_embedding_cache(self):
         if "embedding_cache" not in st.session_state:
@@ -192,22 +139,79 @@ class RAGAgent:
         # Take recent rows to avoid massive API overhead for a quick response
         sample_df = df.tail(max_rows).copy()
         
-        docs = []
-        texts = []
-        existing_contents = {doc["content"] for doc in self.vector_store.documents}
-        
+        langchain_docs = []
         for _, row in sample_df.iterrows():
-            # Format the row into a readable chunk
             row_dict = row.dropna().to_dict()
             text_chunk = ", ".join([f"{k}: {v}" for k, v in row_dict.items()])
-            if text_chunk not in existing_contents:
-                texts.append(text_chunk)
-                docs.append({"content": text_chunk, "metadata": {"index": int(_) if str(_).isdigit() else str(_)}})
+            langchain_docs.append(Document(
+                page_content=text_chunk, 
+                metadata={"source": "dataframe", "row_index": _}
+            ))
             
-        if texts:
-            embeddings = self._get_embeddings(texts)
-            if embeddings.size > 0:
-                self.vector_store.add_documents(docs, embeddings)
+        if langchain_docs:
+            # Split documents for better vectorization
+            split_docs = self.text_splitter.split_documents(langchain_docs)
+            
+            if self.vector_store is None:
+                if self.vector_store_path.exists():
+                    try:
+                        self.vector_store = FAISS.load_local(
+                            str(self.vector_store_path), 
+                            self.embeddings, 
+                            allow_dangerous_deserialization=True
+                        )
+                        self.vector_store.add_documents(split_docs)
+                    except Exception:
+                        self.vector_store = FAISS.from_documents(split_docs, self.embeddings)
+                else:
+                    self.vector_store = FAISS.from_documents(split_docs, self.embeddings)
+            else:
+                self.vector_store.add_documents(split_docs)
+            
+            self.vector_store.save_local(str(self.vector_store_path))
+
+    def ingest_directory(self, path: str = "BackEnd/data/knowledge"):
+        """Ingests all CSV and Excel files from a directory into the vector store."""
+        dir_path = Path(path)
+        if not dir_path.exists():
+            dir_path.mkdir(parents=True, exist_ok=True)
+            return
+
+        # Define loaders for different file types
+        loaders = {
+            "*.csv": DirectoryLoader(path, glob="*.csv", loader_cls=CSVLoader),
+            "*.xlsx": DirectoryLoader(path, glob="*.xlsx", loader_cls=UnstructuredExcelLoader),
+            "*.xls": DirectoryLoader(path, glob="*.xls", loader_cls=UnstructuredExcelLoader)
+        }
+
+        all_docs = []
+        for glob_pattern, loader in loaders.items():
+            try:
+                docs = loader.load()
+                if docs:
+                    all_docs.extend(docs)
+            except Exception as e:
+                logger.error(f"Failed to load files matching {glob_pattern}: {e}")
+
+        if all_docs:
+            split_docs = self.text_splitter.split_documents(all_docs)
+            if self.vector_store is None:
+                if self.vector_store_path.exists():
+                    try:
+                        self.vector_store = FAISS.load_local(
+                            str(self.vector_store_path), 
+                            self.embeddings, 
+                            allow_dangerous_deserialization=True
+                        )
+                        self.vector_store.add_documents(split_docs)
+                    except Exception:
+                        self.vector_store = FAISS.from_documents(split_docs, self.embeddings)
+                else:
+                    self.vector_store = FAISS.from_documents(split_docs, self.embeddings)
+            else:
+                self.vector_store.add_documents(split_docs)
+            self.vector_store.save_local(str(self.vector_store_path))
+            logger.info(f"Ingested {len(all_docs)} files from {path}")
 
     def query(self, prompt: str, context_dfs: dict[str, pd.DataFrame], depth: int = 0) -> str:
         """Full RAG Pipeline: Ingest -> Embed Query -> Retrieve -> Generate."""
@@ -325,9 +329,9 @@ class RAGAgent:
             return "⚠️ Vector Search Unavailable: Could not generate embeddings. Ensure your embedding model is active."
             
         # 5. Retrieve Top K relevant records
-        retrieved_docs = self.vector_store.search(query_emb[0], top_k=7)
+        retrieved_docs = self.vector_store.similarity_search(prompt, k=7) if self.vector_store else []
         
-        context_block = "\n\n".join([f"Record: {doc['content']}" for doc in retrieved_docs])
+        context_block = "\n\n".join([f"Record: {doc.page_content}" for doc in retrieved_docs])
         
         # 6. Augmented Generation
         system_prompt = f"""

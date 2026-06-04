@@ -23,7 +23,7 @@ A professional-grade **Operational Command Center** designed for high-velocity E
 ## 🧠 Core Intelligence Pillars
 
 ### 1. Enterprise-Grade AutoML Forecasting
-Unlike simple linear trends, our **Smart Model Router** automatically evaluates the dataset's characteristics (stationarity, seasonality, sparsity) to select the optimal model from our tournament:
+Unlike simple linear trends, our **Smart Model Router** automatically evaluates the dataset's characteristics (stationarity, seasonality, sparsity) to select the optimal model from our tournament. For a technical breakdown of the algorithms used, see the [Forecasting Model Zoo in skill.md](skill.md#6-forecasting-model-zoo-automl-engine).
 *   **Tier 1 (Statistical):** Exponential Smoothing (Holt-Winters), Ridge/LASSO Regression.
 *   **Tier 2 (Classical):** SARIMA, **Croston's Method** (for intermittent/sparse demand).
 *   **Tier 3 (Supervised ML):** XGBoost, LightGBM with rolling feature engineering.

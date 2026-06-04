@@ -145,6 +145,25 @@ def get_current_sync_window() -> str:
     else:
         return f"{now.date().isoformat()}_16:30"
 
+def _extract_outlet(raw_id: str) -> str:
+    """Extract outlet from Order ID suffix: c=Cumilla, w=Wari, s=Sylhet, else Ecom.
+    
+    Mapping based on branch dispatch rules:
+    - 'c' -> Cumilla
+    - 'w' -> Wari
+    - 's' -> Sylhet
+    - Default -> Ecom
+    """
+    raw_str = str(raw_id).strip().lower()
+    if 'c' in raw_str:
+        return "Cumilla"
+    elif 'w' in raw_str:
+        return "Wari"
+    elif 's' in raw_str:
+        return "Sylhet"
+    return "Ecom"
+
+
 def _process_returns_chunk(
     df: pd.DataFrame,
     sales_df: Optional[pd.DataFrame] = None,
@@ -184,9 +203,11 @@ def _process_returns_chunk(
     if "order_id_raw" in df.columns:
         df["order_id_raw"] = df["order_id_raw"].astype(str).str.strip()
         df["order_id"] = df["order_id_raw"].apply(_normalize_order_id)
+        df["dispatch_outlet"] = df["order_id_raw"].apply(_extract_outlet)
     else:
         df["order_id_raw"] = ""
         df["order_id"] = ""
+        df["dispatch_outlet"] = "Ecom"
 
     # ── Fill NaN text columns ──
     text_cols = ["delivery_issue", "product_details", "courier_reason",
@@ -262,6 +283,7 @@ def _generate_demo_returns() -> pd.DataFrame:
         "partial_amount": np.random.choice([0, 0, 500, 200], num_returns),
         "courier": np.random.choice(["Pathao", "Steadfast", "RedX"], num_returns),
         "product_details": ["Demo Product - " + str(i) for i in range(num_returns)],
+        "dispatch_outlet": np.random.choice(["Ecom", "Wari", "Cumilla", "Sylhet"], num_returns),
     })
     
     df["returned_items"] = [[{"name": "Demo Item", "sku": "DM-01", "qty": 1, "category": "General", "revenue_impact": 500, "transaction_type": "full_return"}]] * num_returns
@@ -1424,6 +1446,18 @@ def calculate_net_sales_metrics(
     # total_returned_items_pct: % of total items sold that were returned (vs total_items_sold, not orders)
     total_returned_items_pct = (total_return_qty_all / total_items_sold * 100) if total_items_sold > 0 else 0.0
 
+    # ── Outlet Performance Breakdown ──
+    outlet_breakdown = {}
+    if "dispatch_outlet" in unique_orders.columns:
+        for outlet, group in unique_orders.groupby("dispatch_outlet"):
+            outlet_breakdown[outlet] = {
+                "total_issues": len(group),
+                "returns": int(group["is_return"].sum()),
+                "partials": int(group["is_partial"].sum()),
+                "exchanges": int(group["is_exchange"].sum()),
+                "revenue_loss": float(group["_resolved_revenue_impact"].sum())
+            }
+
     metrics = {
         "total_issues": len(unique_orders),
         "return_count": int(return_count),
@@ -1458,6 +1492,7 @@ def calculate_net_sales_metrics(
         "matched_returned_items": matched_returned_items,
         "estimated_returned_items": estimated_returned_items,
         "daily_financials": daily_financials,
+        "outlet_breakdown": outlet_breakdown,
     }
 
     # ── Return rate ──

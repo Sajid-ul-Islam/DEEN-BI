@@ -3,50 +3,62 @@ import numpy as np
 import polars as pl
 import warnings
 from datetime import datetime, timedelta
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import Ridge
 
 warnings.filterwarnings("ignore")
 
-class FeatureStore:
-    """Enterprise-grade feature engineering for time-series forecasting."""
-    
-    @staticmethod
-    def generate_features(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
-        if df.empty:
-            return df
+class TimeSeriesFeatureExtractor(BaseEstimator, TransformerMixin):
+    """SKLearn compatible transformer for time-series feature engineering."""
+    def __init__(self, target_col: str):
+        self.target_col = target_col
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        if not isinstance(X, pd.DataFrame) or X.empty:
+            return X
             
-        idx_name = df.index.name or 'index'
-        df_reset = df.copy().reset_index()
+        idx_name = X.index.name or 'index'
+        df_reset = X.copy().reset_index()
         
-        # Convert to Polars LazyFrame for optimized multi-core execution
         lazy_df = pl.from_pandas(df_reset).lazy()
         
         lazy_df = lazy_df.with_columns([
-            # Polars weekday: 1=Mon, 7=Sun. Pandas: 0=Mon, 6=Sun
             (pl.col(idx_name).dt.weekday() - 1).alias('day_of_week'),
             pl.col(idx_name).dt.month().alias('month'),
             pl.col(idx_name).dt.weekday().is_in([6, 7]).cast(pl.Int32).alias('is_weekend')
         ])
         
-        # Lag Features
         lag_exprs = []
         for lag in [1, 7, 14]:
-            if len(df) > lag:
-                lag_exprs.append(pl.col(target_col).shift(lag).alias(f'lag_{lag}'))
+            if len(X) > lag:
+                lag_exprs.append(pl.col(self.target_col).shift(lag).alias(f'lag_{lag}'))
         if lag_exprs:
             lazy_df = lazy_df.with_columns(lag_exprs)
         
-        # Rolling Features
-        if len(df) > 7:
+        if len(X) > 7:
             lazy_df = lazy_df.with_columns([
-                pl.col(target_col).shift(1).rolling_mean(window_size=7).alias('rolling_mean_7'),
-                pl.col(target_col).shift(1).rolling_std(window_size=7).alias('rolling_std_7')
+                pl.col(self.target_col).shift(1).rolling_mean(window_size=7).alias('rolling_mean_7'),
+                pl.col(self.target_col).shift(1).rolling_std(window_size=7).alias('rolling_std_7')
             ])
             
-        # Collect lazy plan and convert back to Pandas for Scikit-Learn
         result_df = lazy_df.fill_null(0.0).collect().to_pandas()
         result_df.set_index(idx_name, inplace=True)
-        
-        return result_df
+        return result_df.drop(columns=[self.target_col], errors='ignore')
+
+class FeatureStore:
+    """Maintains backward compatibility while leveraging the new pipeline transformer."""
+    @staticmethod
+    def generate_features(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
+        extractor = TimeSeriesFeatureExtractor(target_col=target_col)
+        features = extractor.transform(df)
+        # Re-attach target for legacy callers who expect it in the same DF
+        if target_col in df.columns:
+            features[target_col] = df[target_col]
+        return features
 
 class ForecastingRouter:
     """Smart AutoML Router that selects model suites based on data characteristics."""
@@ -162,11 +174,12 @@ def run_automl_forecast(daily_df: pd.DataFrame, metric: str = "revenue", horizon
     
     # 2. Linear Regression (with features)
     try:
-        from sklearn.linear_model import Ridge
-        fs = FeatureStore()
-        feat_df = fs.generate_features(df, metric)
-        X = feat_df.drop(columns=[metric])
-        model = Ridge().fit(X, y)
+        pipeline = Pipeline([
+            ('features', TimeSeriesFeatureExtractor(target_col=metric)),
+            ('regressor', Ridge())
+        ])
+        
+        pipeline.fit(df, y)
         
         # Simple recursive-style projection for Linear
         last_val = y.iloc[-1]

@@ -197,9 +197,10 @@ def render_returns_tracker_page() -> None:
     metrics = calculate_net_sales_metrics(df, sales_df=sales_df, total_items_sold=total_items_sold)
 
     # ── TABS ──
-    tab_dash, tab_recovery, tab_inventory, tab_items, tab_ledger = st.tabs([
+    tab_dash, tab_recovery, tab_outlet, tab_inventory, tab_items, tab_ledger = st.tabs([
         "📊 Executive Dashboard", 
         "🛡️ Recovery & Loyalty", 
+        "🏢 Outlet Performance",
         "📦 Return Inventory", 
         "🛍️ Returned Items List",
         "📋 Detailed Ledger"
@@ -225,6 +226,9 @@ def render_returns_tracker_page() -> None:
 
     with tab_recovery:
         _render_customer_recovery(df, sales_df)
+
+    with tab_outlet:
+        _render_outlet_insights(metrics)
 
     with tab_inventory:
         _render_return_inventory(df, sales_df, key_prefix="top_tab")
@@ -507,9 +511,10 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
         st.info("📊 Charts will appear once return data is loaded.")
         return
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Monthly Trends",
         "🎯 Category Insights",
+        "🏢 Outlet Performance",
         "🥧 Return Reasons",
         "📦 Product Heatmap"
     ])
@@ -521,11 +526,165 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
         _render_category_insights(metrics)
 
     with tab3:
-        _render_reason_charts(metrics)
+        _render_outlet_insights(metrics)
 
     with tab4:
+        _render_reason_charts(metrics)
+
+    with tab5:
         _render_product_heatmap(df)
 
+
+def _render_outlet_insights(metrics: dict) -> None:
+    """Render Outlet Performance visualization."""
+    outlet_data = metrics.get("outlet_breakdown", {})
+    if not outlet_data:
+        st.info("🏢 Outlet performance data will appear once return data is fully processed.")
+        return
+
+    # Convert to DataFrame
+    df_plot = pd.DataFrame.from_dict(outlet_data, orient='index').reset_index().rename(columns={'index': 'Outlet'})
+    
+    st.markdown("### 🏢 Outlet Performance Breakdown")
+    st.caption("Distribution of delivery issues segmented by dispatch location.")
+
+    # Create a long format for grouped bar chart
+    df_melted = df_plot.melt(
+        id_vars=["Outlet"], 
+        value_vars=["returns", "partials", "exchanges"],
+        var_name="Issue Type", 
+        value_name="Count"
+    )
+    
+    # Capitalize for display
+    df_melted["Issue Type"] = df_melted["Issue Type"].str.title()
+
+    fig = px.bar(
+        df_melted,
+        x="Outlet", y="Count",
+        color="Issue Type",
+        title="Issue Distribution by Dispatch Outlet",
+        barmode="group",
+        color_discrete_map={
+            "Returns": "#ef4444",
+            "Partials": "#eab308",
+            "Exchanges": "#8b5cf6"
+        },
+        text_auto=True
+    )
+
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif"),
+        height=400,
+        margin=dict(l=20, r=20, t=50, b=20),
+        legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center")
+    )
+    st.plotly_chart(fig, use_container_width=True, key=KeyManager.get_key("returns", "outlet_performance_bar"))
+
+
+def _render_outlet_insights(metrics: dict) -> None:
+    """Render Outlet Performance visualization."""
+    outlet_data = metrics.get("outlet_breakdown", {})
+    if not outlet_data:
+        st.info("🏢 Outlet performance data will appear once return data is fully processed.")
+        return
+
+    # Convert to DataFrame
+    df_plot = pd.DataFrame.from_dict(outlet_data, orient='index').reset_index().rename(columns={'index': 'Outlet'})
+    
+    st.markdown("### 🏢 Outlet Performance Breakdown")
+    st.caption("Distribution of delivery issues segmented by dispatch location (Ecom, Wari, Cumilla, Sylhet).")
+
+    # 1. Volume Distribution Chart
+    df_melted = df_plot.melt(
+        id_vars=["Outlet"], 
+        value_vars=["returns", "partials", "exchanges"],
+        var_name="Issue Type", 
+        value_name="Count"
+    )
+    df_melted["Issue Type"] = df_melted["Issue Type"].str.title()
+
+    fig = px.bar(
+        df_melted,
+        x="Outlet", y="Count",
+        color="Issue Type",
+        title="Issue Distribution by Dispatch Outlet",
+        barmode="group",
+        color_discrete_map={
+            "Returns": "#ef4444",
+            "Partials": "#eab308",
+            "Exchanges": "#8b5cf6"
+        },
+        text_auto=True
+    )
+
+    fig.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif"),
+        height=400,
+        margin=dict(l=20, r=20, t=50, b=20),
+        legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center")
+    )
+    st.plotly_chart(fig, use_container_width=True, key=KeyManager.get_key("returns", "outlet_performance_bar"))
+
+    # 2. Revenue Loss Chart
+    st.markdown("---")
+    st.markdown("### 💸 Revenue Loss by Outlet")
+    st.caption("Financial impact of returns and partials attributed to each dispatch location.")
+
+    fig_loss = px.bar(
+        df_plot.sort_values("revenue_loss", ascending=False),
+        x="Outlet", y="revenue_loss",
+        title="Total Revenue Loss per Outlet (TK)",
+        color="revenue_loss",
+        color_continuous_scale="Reds",
+        text_auto=".2s",
+        labels={"revenue_loss": "Revenue Loss (৳)"}
+    )
+
+    fig_loss.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif"),
+        height=400,
+        margin=dict(l=20, r=20, t=50, b=20),
+        coloraxis_showscale=False
+    )
+    st.plotly_chart(fig_loss, use_container_width=True, key=KeyManager.get_key("returns", "outlet_revenue_loss_bar"))
+
+    # 3. Precise Data Ledger
+    st.markdown("---")
+    st.markdown("### 📋 Outlet Performance Ledger")
+    st.caption("Precise numeric breakdown and share of totals per dispatch location.")
+
+    total_issues_sum = df_plot["total_issues"].sum()
+    total_revenue_loss_sum = df_plot["revenue_loss"].sum()
+
+    df_table = df_plot.copy()
+    df_table["Issue Share %"] = (df_table["total_issues"] / total_issues_sum * 100) if total_issues_sum > 0 else 0
+    df_table["Loss Share %"] = (df_table["revenue_loss"] / total_revenue_loss_sum * 100) if total_revenue_loss_sum > 0 else 0
+    
+    # Sort by Revenue Loss descending
+    df_table = df_table.sort_values("revenue_loss", ascending=False)
+
+    st.dataframe(
+        df_table,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Outlet": st.column_config.TextColumn("Dispatch Outlet", width="medium"),
+            "total_issues": st.column_config.NumberColumn("Total Issues", format="%d"),
+            "returns": st.column_config.NumberColumn("Returns", format="%d"),
+            "partials": st.column_config.NumberColumn("Partials", format="%d"),
+            "exchanges": st.column_config.NumberColumn("Exchanges", format="%d"),
+            "revenue_loss": st.column_config.NumberColumn("Revenue Loss", format="৳%.0f"),
+            "Issue Share %": st.column_config.ProgressColumn("Issue Share", format="%.1f%%", min_value=0, max_value=100),
+            "Loss Share %": st.column_config.ProgressColumn("Loss Share", format="%.1f%%", min_value=0, max_value=100),
+        }
+    )
 
 def _render_category_insights(metrics: dict) -> None:
     """Render Yield-by-Category visualization."""

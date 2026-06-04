@@ -18,6 +18,7 @@ from streamlit_autorefresh import st_autorefresh
 from FrontEnd.utils.error_handler import ERROR_LOG_FILE, get_logs, log_error
 from FrontEnd.utils.state import init_state
 from FrontEnd.components import ui
+from BackEnd.core.dependencies import render_dependency_alerts
 
 
 # ── Numbered dataframe rows (1-based index for readability) ──────────────────
@@ -282,6 +283,7 @@ def _render_workspace_sidebar():
                 st.session_state.pop("embedding_cache", None)
                 st.toast("Embedding cache cleared!", icon="🧹")
 
+            _render_rag_file_manager()
             _render_pilot_knowledge_manager()
             _render_system_logs()
 
@@ -307,6 +309,38 @@ def _render_system_logs():
         if st.button("Clear logs", use_container_width=True):
             _clear_error_logs()
             st.rerun()
+
+
+def _render_rag_file_manager():
+    """Renders a file uploader to add documents to the RAG knowledge base."""
+    with st.expander("📚 RAG Knowledge Ingestion", expanded=False):
+        st.caption("Upload CSV or Excel files to train the Data Pilot on custom datasets.")
+        uploaded_files = st.file_uploader(
+            "Upload knowledge files", 
+            type=["csv", "xlsx", "xls"], 
+            accept_multiple_files=True, 
+            key="rag_knowledge_uploader",
+            label_visibility="collapsed"
+        )
+        
+        if st.button("🚀 Ingest Files", use_container_width=True, disabled=not uploaded_files):
+            from pathlib import Path
+            knowledge_dir = Path("BackEnd/data/knowledge")
+            knowledge_dir.mkdir(parents=True, exist_ok=True)
+            
+            saved_count = 0
+            for uploaded_file in uploaded_files:
+                target_path = knowledge_dir / uploaded_file.name
+                with open(target_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                saved_count += 1
+            
+            if saved_count > 0:
+                from BackEnd.services.rag_engine import RAGAgent
+                agent = RAGAgent()
+                with st.spinner(f"Ingesting {saved_count} files into vector store..."):
+                    agent.ingest_directory()
+                st.toast(f"Successfully ingested {saved_count} files!", icon="✅")
 
 
 def _render_pilot_knowledge_manager():
@@ -380,6 +414,7 @@ def _render_global_chat():
 def run_app():
     init_state()
     ui.setup_theme()
+    render_dependency_alerts()
     pg = _render_workspace_sidebar()
     pg.run()
     ui.page_header()
