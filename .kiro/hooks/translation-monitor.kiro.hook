@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "Translation Monitor Hook",
+  "description": "Monitor localization files for changes and trigger translation generation",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": ["**/*.json", "**/*.yaml", "**/*.yml", "**/*.po", "**/*.properties"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "python scripts/translate_text_content.py",
+    "timeout": 300
+  }
+}

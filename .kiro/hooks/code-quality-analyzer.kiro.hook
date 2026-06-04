@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Code Quality Analyzer",
+  "description": "Analyzes modified Python source files for code smells, design patterns issues, and best practices violations, providing suggestions for improvements",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the modified Python source file for potential improvements. Check for:\n1. Code smells (long functions, complex conditionals, duplicated code)\n2. Design pattern issues (missing encapsulation, tight coupling)\n3. Best practices violations (PEP 8, error handling, logging)\n4. Performance optimizations (vectorized operations, efficient data structures)\n5. Maintainability improvements (docstrings, type hints, modularity)\n\nFocus on:\n- Readability: Clear variable names, proper commenting, logical flow\n- Maintainability: Low coupling, high cohesion, proper error handling\n- Performance: Vectorized operations, efficient data structures, avoiding unnecessary iterations\n\nProvide specific, actionable suggestions with:\n- What the issue/opportunity is\n- Why it matters\n- Concrete example of how to improve\n\nReturn a structured report with categorized suggestions (Critical, Important, Optional)."
+  },
+  "workspaceFolderName": "DEEN-BI",
+  "shortName": "code-quality-analyzer"
+}

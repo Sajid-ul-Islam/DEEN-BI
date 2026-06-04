@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "name": "Update Documentation on Code Change",
+  "description": "Listens to Python source files and related project files. When any change is detected, prompts agent to review and update documentation in README.md or docs folder.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*.py",
+      "*.md",
+      "*.toml",
+      "*.txt",
+      "*.yaml",
+      "*.yml"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The following files have been modified. Review the changes and update the documentation (README.md or docs folder) accordingly to keep it in sync with the codebase.\n\nModified files:\n{{filePaths}}\n\nPlease:\n1. Read the modified files to understand the changes\n2. Identify which documentation sections need updating\n3. Make targeted updates to README.md or docs folder\n4. Ensure technical accuracy and consistency"
+  },
+  "workspaceFolderName": "DEEN-BI",
+  "shortName": "docs-update-on-change"
+}
