@@ -26,6 +26,11 @@ openai
 pyshorteners
 python-dotenv
 requests
+XlsxWriter
+pyarrow
+gcsfs
+Pillow
+beautifulsoup4
 mypy
 pytest
 ruff
