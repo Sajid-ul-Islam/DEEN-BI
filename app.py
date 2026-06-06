@@ -14,7 +14,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from streamlit_autorefresh import st_autorefresh
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ImportError:
+    st_autorefresh = None
 from FrontEnd.utils.error_handler import ERROR_LOG_FILE, get_logs, log_error
 from FrontEnd.utils.state import init_state
 from FrontEnd.components import ui
@@ -175,7 +178,10 @@ def _render_workspace_sidebar():
 
         auto_refresh = st.toggle("Auto-Refresh (15 min)", value=False, key="global_auto_refresh")
         if auto_refresh:
-            st_autorefresh(interval=15 * 60 * 1000, key="global_refresh")
+            if st_autorefresh:
+                st_autorefresh(interval=15 * 60 * 1000, key="global_refresh")
+            else:
+                st.warning("Auto-refresh is currently unavailable (missing dependency: streamlit-autorefresh).")
 
         st.divider()
 

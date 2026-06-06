@@ -12,7 +12,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from streamlit_autorefresh import st_autorefresh
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ImportError:
+    st_autorefresh = None
 # Robust Streamlit Context Import
 try:
     from streamlit.runtime.scriptrunner import add_script_run_context as add_ctx
@@ -164,7 +167,10 @@ def render_returns_tracker_page() -> None:
     if is_loading and "returns_data" not in st.session_state:
         _render_skeleton()
         # Poll for completion
-        st_autorefresh(interval=3000, key=KeyManager.get_key("returns", "sync_refresh"))
+        if st_autorefresh:
+            st_autorefresh(interval=3000, key=KeyManager.get_key("returns", "sync_refresh"))
+        else:
+            st.warning("Auto-refresh is missing. Please refresh the page manually.")
         return
 
     # 2. Handle missing data case
@@ -178,7 +184,8 @@ def render_returns_tracker_page() -> None:
     # 3. Data is available - If still refreshing in background, show indicator
     if is_loading:
         st.caption("🔄 Background sync in progress... ensuring data fidelity.")
-        st_autorefresh(interval=5000, key=KeyManager.get_key("returns", "bg_refresh"))
+        if st_autorefresh:
+            st_autorefresh(interval=5000, key=KeyManager.get_key("returns", "bg_refresh"))
 
     df = st.session_state.returns_data.copy()
 

@@ -9,7 +9,10 @@ from typing import TypedDict, Any
 
 import pandas as pd
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
+try:
+    from streamlit_autorefresh import st_autorefresh
+except ImportError:
+    st_autorefresh = None
 
 from BackEnd.services.hybrid_data_loader import (
     get_woocommerce_orders_cache_status,
@@ -197,7 +200,10 @@ def _render_initial_sync_placeholder(start_date_str: str, end_date_str: str, sta
     ui.skeleton_row(count=6)
     st.markdown("<br>", unsafe_allow_html=True)
     st.caption(status_message)
-    st_autorefresh(interval=3000, limit=40, key=f"orders_bootstrap_{start_date_str}_{end_date_str}")
+    if st_autorefresh:
+        st_autorefresh(interval=3000, limit=40, key=f"orders_bootstrap_{start_date_str}_{end_date_str}")
+    else:
+        st.warning("Auto-refresh is missing. Please refresh the page manually to see updates.")
 
 
 def _build_core_dashboard_data(

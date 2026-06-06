@@ -12,7 +12,8 @@ REQUIRED_PACKAGES = [
     ("statsmodels", "statsmodels"),
     ("prophet", "prophet"),
     ("xgboost", "xgboost"),
-    ("sqlparse", "sqlparse")
+    ("sqlparse", "sqlparse"),
+    ("streamlit_autorefresh", "streamlit-autorefresh")
 ]
 
 def get_missing_dependencies() -> List[str]:
