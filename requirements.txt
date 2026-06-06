@@ -9,6 +9,7 @@ polars
 numpy
 streamlit
 streamlit-autorefresh
+plotly
 statsmodels
 sqlparse
 mypy

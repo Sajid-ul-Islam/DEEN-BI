@@ -176,7 +176,8 @@ def render_returns_tracker_page() -> None:
     # 2. Handle missing data case
     if "returns_data" not in st.session_state or st.session_state.returns_data.empty:
         if not is_loading:
-            st.info("📊 No Returns Data available. Try a Force Refresh or check the source connection.")
+            from FrontEnd.components.animation import lottie_empty_state
+            lottie_empty_state("📊 No Returns Data available. Try a Force Refresh or check the source connection.")
         else:
             _render_skeleton()
         return
@@ -221,7 +222,8 @@ def render_returns_tracker_page() -> None:
         _render_financial_impact_summary(metrics, show_exact=show_exact)
         
         if df.empty:
-            st.info("No returns logged within this specific time frame.")
+            from FrontEnd.components.animation import lottie_empty_state
+            lottie_empty_state("No returns logged within this specific time frame.")
         else:
             # ── Charts ──
             st.markdown("---")
@@ -515,7 +517,8 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
     """Render the analytics charts."""
 
     if df.empty or "date" not in df.columns:
-        st.info("📊 Charts will appear once return data is loaded.")
+        from FrontEnd.components.animation import lottie_empty_state
+        lottie_empty_state("📊 Charts will appear once return data is loaded.")
         return
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -713,7 +716,8 @@ def _render_category_insights(metrics: dict) -> None:
             })
     
     if not plot_data:
-        st.info("Not enough category data for visualization.")
+        from FrontEnd.components.animation import lottie_empty_state
+        lottie_empty_state("Not enough category data for visualization.")
         return
 
     df_plot = pd.DataFrame(plot_data).sort_values("Yield %", ascending=True)
@@ -853,7 +857,8 @@ def _render_reason_charts(metrics: dict) -> None:
     reasons = metrics.get("reason_counts", {})
 
     if not isinstance(reasons, dict) or not reasons:
-        st.info("No live inventory data is available yet. Initializing sync...")
+        from FrontEnd.components.animation import lottie_empty_state
+        lottie_empty_state("No live inventory data is available yet. Initializing sync...")
         return
 
     c1, c2 = st.columns(2)

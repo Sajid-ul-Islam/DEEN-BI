@@ -183,6 +183,11 @@ def _render_workspace_sidebar():
             else:
                 st.warning("Auto-refresh is currently unavailable (missing dependency: streamlit-autorefresh).")
 
+        focus_mode = st.toggle("🎥 Focus Mode (War Room)", value=st.session_state.get("focus_mode", False), key="focus_mode_toggle", help="Hides sidebar and increases contrast for large screens")
+        if focus_mode != st.session_state.get("focus_mode", False):
+            st.session_state.focus_mode = focus_mode
+            st.rerun()
+
         st.divider()
 
         # ── Merged System Heartbeat ──────────────────────────────────────────
@@ -402,7 +407,32 @@ def _render_global_chat():
     data_ready = dashboard_data and not dashboard_data.get("sales", pd.DataFrame()).empty
     
     st.markdown("<br><br>", unsafe_allow_html=True)
-    with st.expander("🤖 Open Data Pilot (Global AI Assistant)", expanded=False):
+
+    nudge_html = ""
+    if data_ready:
+        sales_df = dashboard_data.get("sales", pd.DataFrame())
+        returns_df = st.session_state.get("returns_data", pd.DataFrame())
+        
+        # Simple fast nudge check
+        anomalies_msg = ""
+        if "order_status" in sales_df.columns:
+            recent_refunds = len(sales_df[sales_df["order_status"].astype(str).str.lower() == "refunded"])
+            if recent_refunds > 5:
+                anomalies_msg = f"Hey, I noticed a sudden spike with {recent_refunds} refunds recently."
+        
+        if anomalies_msg:
+            nudge_html = f'''
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom: 10px;">
+                <div style="width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; box-shadow: 0 0 8px #ef4444; animation: pulse 1.5s infinite;"></div>
+                <span style="font-size: 0.9rem; color: #ef4444; font-weight: 600;">Pilot Alert: {anomalies_msg}</span>
+            </div>
+            <style>@keyframes pulse {{ 0% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }} 70% {{ transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }} 100% {{ transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }} }}</style>
+            '''
+
+    if nudge_html:
+        st.markdown(nudge_html, unsafe_allow_html=True)
+
+    with st.expander("🤖 Open Data Pilot (Global AI Assistant)", expanded=bool(nudge_html)):
         if data_ready:
             sales_df = dashboard_data.get("sales", pd.DataFrame())
             returns_df = st.session_state.get("returns_data", pd.DataFrame())
@@ -425,8 +455,26 @@ def run_app():
     pg.run()
     ui.page_header()
     _render_primary_navigation()
+    
+    from FrontEnd.components.command_palette import inject_command_palette_listener
+    inject_command_palette_listener()
+    
     _render_global_chat()
     ui.page_footer()
+
+    if st.session_state.get("focus_mode", False):
+        st.markdown("""
+        <style>
+            [data-testid="stSidebar"] { display: none !important; }
+            html, body, [class*="css"] { font-size: 115% !important; }
+            .stApp { background-color: #050505 !important; color: #ffffff !important; }
+            [data-testid="stMetricContainer"], .metric-card, .bi-hero, .hub-card { 
+                background: #111111 !important; 
+                border-color: #333333 !important; 
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
 
 
 try:
