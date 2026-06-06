@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    HAS_PLOTLY = True
+except ImportError:
+    px = None
+    go = None
+    HAS_PLOTLY = False
 
 
 
@@ -26,6 +32,8 @@ import plotly.graph_objects as go
 
 
 def build_discrete_color_map(labels: list[str], scale_name: str = "Plasma") -> dict[str, str]:
+    if not HAS_PLOTLY:
+        return {}
     cleaned = [str(label) for label in labels if str(label).strip()]
     if not cleaned:
         return {}
@@ -44,6 +52,8 @@ def apply_plotly_theme(
     margin: dict | None = None,
     showlegend: bool = True,
 ):
+    if not HAS_PLOTLY or fig is None:
+        return None
     chart_margin = margin or dict(l=12, r=12, t=56, b=12)
     fig.update_layout(
         height=height,
@@ -78,6 +88,8 @@ def donut_chart(
     title: str,
     color_scale: str = "Plasma",
 ):
+    if not HAS_PLOTLY:
+        return None
     if df is None or df.empty or values not in df.columns or names not in df.columns:
         return go.Figure()
 
@@ -135,6 +147,8 @@ def bar_chart(
     orientation: str = "h",
     text_auto: str | bool | None = None,
 ):
+    if not HAS_PLOTLY:
+        return None
     if df is None or df.empty or x not in df.columns or y not in df.columns:
         return go.Figure()
 
