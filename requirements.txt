@@ -8,6 +8,7 @@ pandas
 polars
 numpy
 streamlit
+streamlit-autorefresh
 statsmodels
 sqlparse
 mypy
