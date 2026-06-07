@@ -47,14 +47,52 @@ from BackEnd.core.logging_config import get_logger
 
 logger = get_logger("returns_tracker_page")
 
+from pathlib import Path
+RETURNS_CACHE_FILE = Path("BackEnd/cache/returns_data.parquet")
 
-def _load_returns_async(sync_window: str, sales_df_full: pd.DataFrame):
+def _get_returns_data_with_daily_cache(sync_window: str, sales_df_full: pd.DataFrame, force_refresh: bool = False) -> pd.DataFrame:
+    """Load returns data with a 1-day parquet cache."""
+    if not force_refresh and RETURNS_CACHE_FILE.exists():
+        modified_time = datetime.fromtimestamp(RETURNS_CACHE_FILE.stat().st_mtime)
+        if datetime.now() - modified_time < timedelta(days=1):
+            try:
+                logger.info("Loading returns data from daily Parquet cache.")
+                return pd.read_parquet(RETURNS_CACHE_FILE)
+            except Exception as e:
+                logger.error(f"Failed to read returns cache: {e}")
+                
+    # If cache is missing, stale, or corrupt, fetch fresh
+    logger.info("Fetching fresh returns data from Google Sheets.")
+    df_returns = load_returns_data(sync_window=sync_window, sales_df=sales_df_full, force_refresh=force_refresh)
+    
+    if not df_returns.empty:
+        try:
+            RETURNS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            df_returns.to_parquet(RETURNS_CACHE_FILE, index=False)
+        except Exception as e:
+            logger.error(f"Failed to save returns cache: {e}")
+            
+    return df_returns
+
+def _safe_scalar(val):
+    """Extract scalar from Pandas Series/arrays defensively."""
+    try:
+        if hasattr(val, "item") and callable(val.item):
+            return val.item()
+        if isinstance(val, (pd.Series, list, tuple)):
+            return val[0] if len(val) > 0 else 0
+    except Exception:
+        pass
+    return val
+
+
+def _load_returns_async(sync_window: str, sales_df_full: pd.DataFrame, force_refresh: bool = False):
     """Background loader for returns data."""
     try:
         st.session_state["returns_load_started"] = time.time()
         
         # Load the data (blocks this thread, not the UI)
-        df_returns = load_returns_data(sync_window=sync_window, sales_df=sales_df_full)
+        df_returns = _get_returns_data_with_daily_cache(sync_window=sync_window, sales_df_full=sales_df_full, force_refresh=force_refresh)
         
         # Store in session state
         st.session_state["returns_data"] = df_returns
@@ -131,10 +169,22 @@ def render_returns_tracker_page() -> None:
     c1, c2 = st.columns([3, 1])
     with c1:
         st.markdown("### 🔄 Returns Insights")
+        if RETURNS_CACHE_FILE.exists():
+            mod_time = datetime.fromtimestamp(RETURNS_CACHE_FILE.stat().st_mtime)
+            st.caption(f"Last updated from Sheets: **{mod_time.strftime('%Y-%m-%d %I:%M %p')}**")
     with c2:
         if st.button("🔄 Force Refresh", use_container_width=True, key=KeyManager.get_key("returns", "force_refresh_btn")):
             # Clear cache and state to trigger a fresh background sync
-            load_returns_data.clear()
+            if RETURNS_CACHE_FILE.exists():
+                try:
+                    RETURNS_CACHE_FILE.unlink()
+                except Exception:
+                    pass
+            try:
+                load_returns_data.clear()
+            except AttributeError:
+                pass
+            st.session_state["returns_force_refresh_flag"] = True
             st.session_state.pop("returns_data", None)
             st.session_state.pop("last_returns_sync", None)
             st.session_state["returns_loading"] = False
@@ -147,29 +197,42 @@ def render_returns_tracker_page() -> None:
     # ── Auto Data Sync ──
     sales_df_full = _get_gross_sales_context()
     sales_df = _filter_sales_by_date_range(sales_df_full, start_dt, end_dt)
+    
+    force_refresh_flag = st.session_state.pop("returns_force_refresh_flag", False)
+    
     # ── Trigger Load if Needed ──
     sync_window = get_current_sync_window()
-    needs_load = "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window
+    needs_load = force_refresh_flag or "returns_data" not in st.session_state or st.session_state.get("last_returns_sync") != sync_window
     is_loading = st.session_state.get("returns_loading", False)
     is_complete = st.session_state.get("returns_load_complete", False)
 
     if needs_load and not is_loading:
-        if DATA_SYNC_MODE == "direct":
-            with st.spinner("📦 Syncing Returns Data..."):
-                st.session_state["returns_data"] = load_returns_data(sync_window=sync_window, sales_df=sales_df_full)
+        # Optimize background thread: Fast-path local cache to prevent skeleton flash & abrupt re-renders
+        cache_valid = False
+        if not force_refresh_flag and RETURNS_CACHE_FILE.exists():
+            mod_time = datetime.fromtimestamp(RETURNS_CACHE_FILE.stat().st_mtime)
+            if datetime.now() - mod_time < timedelta(days=1):
+                cache_valid = True
+                
+        if DATA_SYNC_MODE == "direct" or cache_valid:
+            with st.spinner("📦 Loading Returns Data..."):
+                st.session_state["returns_data"] = _get_returns_data_with_daily_cache(sync_window=sync_window, sales_df_full=sales_df_full, force_refresh=force_refresh_flag)
                 st.session_state["last_returns_sync"] = sync_window
                 st.session_state["returns_load_complete"] = True
         else:
-            _trigger_background_load(sync_window, sales_df_full)
+            _trigger_background_load(sync_window, sales_df_full, force_refresh=force_refresh_flag)
             st.rerun()
+
+    # ── Dynamic Autorefresh Interval ──
+    if st_autorefresh:
+        # 3 seconds if actively syncing, otherwise 15 minutes to keep cache fresh
+        refresh_interval = 3000 if is_loading else 15 * 60 * 1000
+        st_autorefresh(interval=refresh_interval, key=KeyManager.get_key("returns", "dynamic_auto_refresh"))
 
     # 1. Render skeleton if loading AND no data exists yet
     if is_loading and "returns_data" not in st.session_state:
         _render_skeleton()
-        # Poll for completion
-        if st_autorefresh:
-            st_autorefresh(interval=3000, key=KeyManager.get_key("returns", "sync_refresh"))
-        else:
+        if not st_autorefresh:
             st.warning("Auto-refresh is missing. Please refresh the page manually.")
         return
 
@@ -185,8 +248,6 @@ def render_returns_tracker_page() -> None:
     # 3. Data is available - If still refreshing in background, show indicator
     if is_loading:
         st.caption("🔄 Background sync in progress... ensuring data fidelity.")
-        if st_autorefresh:
-            st_autorefresh(interval=5000, key=KeyManager.get_key("returns", "bg_refresh"))
 
     df = st.session_state.returns_data.copy()
 
@@ -237,7 +298,7 @@ def render_returns_tracker_page() -> None:
         _render_customer_recovery(df, sales_df)
 
     with tab_outlet:
-        _render_outlet_insights(metrics)
+        _render_outlet_insights(metrics, key_prefix="main_tab_")
 
     with tab_inventory:
         _render_return_inventory(df, sales_df, key_prefix="top_tab")
@@ -313,19 +374,28 @@ def _render_kpi_cards(metrics: dict, show_exact: bool = False) -> None:
     st.markdown("#### 📦 Operational Intelligence")
     
     # Defensive: ensure scalar values (not Series/arrays)
-    t_ord = metrics.get('total_orders', 0)
-    t_ord = int(t_ord) if hasattr(t_ord, '__int__') else 0
+    t_ord = _safe_scalar(metrics.get('total_orders', 0))
+    try:
+        t_ord = float(t_ord)
+    except (ValueError, TypeError):
+        t_ord = 0.0
     
     def format_val(num):
-        if show_exact: return f"{num:,}"
+        num = _safe_scalar(num)
+        try:
+            num = float(num)
+        except (ValueError, TypeError):
+            num = 0.0
+        if show_exact: return f"{num:,.0f}"
         if num >= 1_000_000: return f"{num/1_000_000:.1f}M".replace(".0M", "M")
         if num >= 1_000: return f"{num/1_000:.1f}K".replace(".0K", "K")
-        return f"{num:,}"
+        return f"{num:,.0f}"
 
     def format_pct(val):
-        val_str = format_val(val)
+        val_float = float(_safe_scalar(val)) if val is not None else 0.0
+        val_str = format_val(val_float)
         if t_ord > 0:
-            return f"{val_str} ({(val / t_ord * 100):.1f}%)"
+            return f"{val_str} ({(val_float / t_ord * 100):.1f}%)"
         return f"{val_str}"
 
     cols = st.columns(4, gap="small")
@@ -368,27 +438,38 @@ def _render_financial_impact_summary(metrics: dict, show_exact: bool = False) ->
     st.markdown("#### 💰 Financial Integrity & Yield")
     
     def format_curr(num):
+        num = _safe_scalar(num)
+        try:
+            num = float(num)
+        except (ValueError, TypeError):
+            num = 0.0
         if show_exact: return f"৳{num:,.0f}"
         if num >= 1_000_000: return f"৳{num/1_000_000:.1f}M".replace(".0M", "M")
         if num >= 1_000: return f"৳{num/1_000:.1f}K".replace(".0K", "K")
         return f"৳{num:,.0f}"
         
     def format_val(num):
-        if show_exact: return f"{num:,}"
+        num = _safe_scalar(num)
+        try:
+            num = float(num)
+        except (ValueError, TypeError):
+            num = 0.0
+        if show_exact: return f"{num:,.0f}"
         if num >= 1_000_000: return f"{num/1_000_000:.1f}M".replace(".0M", "M")
         if num >= 1_000: return f"{num/1_000:.1f}K".replace(".0K", "K")
-        return f"{num:,}"
+        return f"{num:,.0f}"
 
     # Defensive: ensure all metrics are scalars (not Series/arrays)
-    gross = float(metrics.get('gross_sales', 0) or 0)
-    net_sales = float(metrics.get('net_sales', 0) or 0)
-    net_yield_pct = float(metrics.get('net_yield_pct', 0) or 0)
+    gross = float(_safe_scalar(metrics.get('gross_sales', 0)) or 0)
+    net_sales = float(_safe_scalar(metrics.get('net_sales', 0)) or 0)
+    net_yield_pct = float(_safe_scalar(metrics.get('net_yield_pct', 0)) or 0)
 
-    total_ret_qty = int(metrics.get('total_return_qty_all', 0) or 0)
-    total_items_sold = int(metrics.get('total_items_sold', 0) or 0)
-    total_returned_items_pct = float(metrics.get('total_returned_items_pct', 0.0) or 0.0)
-    returned_orders_pct = float(metrics.get('returned_orders_pct', 0.0) or 0.0)
-    partial_loss = float(metrics.get('partial_loss', metrics.get('partial_amounts', 0)) or 0)
+    total_ret_qty = int(float(_safe_scalar(metrics.get('total_return_qty_all', 0)) or 0))
+    total_items_sold = int(float(_safe_scalar(metrics.get('total_items_sold', 0)) or 0))
+    total_returned_items_pct = float(_safe_scalar(metrics.get('total_returned_items_pct', 0.0)) or 0.0)
+    returned_orders_pct = float(_safe_scalar(metrics.get('returned_orders_pct', 0.0)) or 0.0)
+    partial_loss = float(_safe_scalar(metrics.get('partial_loss', metrics.get('partial_amounts', 0))) or 0)
+    return_value_extracted = float(_safe_scalar(metrics.get('return_value_extracted', 0)) or 0)
 
     # Primary Row: High-level financial outcome
     c1, c2, c3 = st.columns(3)
@@ -409,7 +490,7 @@ def _render_financial_impact_summary(metrics: dict, show_exact: bool = False) ->
     with c3:
         ui.metric_highlight(
             label="Total Loss Attribution",
-            value=format_curr(metrics.get('return_value_extracted', 0) + partial_loss),
+            value=format_curr(return_value_extracted + partial_loss),
             help_text="Revenue lost to returns and partials",
             icon="📉"
         )
@@ -545,56 +626,7 @@ def _render_charts(df: pd.DataFrame, metrics: dict, sales_df: pd.DataFrame) -> N
         _render_product_heatmap(df)
 
 
-def _render_outlet_insights(metrics: dict) -> None:
-    """Render Outlet Performance visualization."""
-    outlet_data = metrics.get("outlet_breakdown", {})
-    if not outlet_data:
-        st.info("🏢 Outlet performance data will appear once return data is fully processed.")
-        return
-
-    # Convert to DataFrame
-    df_plot = pd.DataFrame.from_dict(outlet_data, orient='index').reset_index().rename(columns={'index': 'Outlet'})
-    
-    st.markdown("### 🏢 Outlet Performance Breakdown")
-    st.caption("Distribution of delivery issues segmented by dispatch location.")
-
-    # Create a long format for grouped bar chart
-    df_melted = df_plot.melt(
-        id_vars=["Outlet"], 
-        value_vars=["returns", "partials", "exchanges"],
-        var_name="Issue Type", 
-        value_name="Count"
-    )
-    
-    # Capitalize for display
-    df_melted["Issue Type"] = df_melted["Issue Type"].str.title()
-
-    fig = px.bar(
-        df_melted,
-        x="Outlet", y="Count",
-        color="Issue Type",
-        title="Issue Distribution by Dispatch Outlet",
-        barmode="group",
-        color_discrete_map={
-            "Returns": "#ef4444",
-            "Partials": "#eab308",
-            "Exchanges": "#8b5cf6"
-        },
-        text_auto=True
-    )
-
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, sans-serif"),
-        height=400,
-        margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center")
-    )
-    st.plotly_chart(fig, use_container_width=True, key=KeyManager.get_key("returns", "outlet_performance_bar"))
-
-
-def _render_outlet_insights(metrics: dict) -> None:
+def _render_outlet_insights(metrics: dict, key_prefix: str = "") -> None:
     """Render Outlet Performance visualization."""
     outlet_data = metrics.get("outlet_breakdown", {})
     if not outlet_data:
@@ -638,7 +670,7 @@ def _render_outlet_insights(metrics: dict) -> None:
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center")
     )
-    st.plotly_chart(fig, use_container_width=True, key=KeyManager.get_key("returns", "outlet_performance_bar"))
+    st.plotly_chart(fig, use_container_width=True, key=KeyManager.get_key("returns", f"{key_prefix}outlet_performance_bar"))
 
     # 2. Revenue Loss Chart
     st.markdown("---")
@@ -663,7 +695,7 @@ def _render_outlet_insights(metrics: dict) -> None:
         margin=dict(l=20, r=20, t=50, b=20),
         coloraxis_showscale=False
     )
-    st.plotly_chart(fig_loss, use_container_width=True, key=KeyManager.get_key("returns", "outlet_revenue_loss_bar"))
+    st.plotly_chart(fig_loss, use_container_width=True, key=KeyManager.get_key("returns", f"{key_prefix}outlet_revenue_loss_bar"))
 
     # 3. Precise Data Ledger
     st.markdown("---")
@@ -1036,6 +1068,9 @@ def _render_return_inventory(df: pd.DataFrame, sales_df: pd.DataFrame, key_prefi
                 if not match.empty:
                     sku = match.iloc[0].get("sku", "N/A")
 
+            if not sku or sku == "N/A":
+                continue
+
             item_rows.append({
                 "Date": row["date"].strftime("%Y-%m-%d") if pd.notnull(row["date"]) else "N/A",
                 "Order ID": row["order_id_raw"],
@@ -1147,12 +1182,16 @@ def _render_returned_items_list(df: pd.DataFrame) -> None:
             if not isinstance(item, dict):
                 continue
 
+            sku = item.get("sku", "N/A")
+            if not sku or sku == "N/A":
+                continue
+
             item_rows.append({
                 "Date": row["date"].strftime("%Y-%m-%d") if pd.notnull(row["date"]) else "N/A",
                 "Order ID": row["order_id_raw"],
                 "Order Number": row.get("order_id", "N/A"),
                 "Issue Type": row.get("issue_type", "N/A"),
-                "SKU": item.get("sku", "N/A"),
+                "SKU": sku,
                 "WC Matched": "✅" if item.get("matched_from_wc") else "❌",
                 "Product Name": item.get("name", "Unknown"),
                 "Size": item.get("size", "N/A"),
@@ -1414,10 +1453,10 @@ def _render_export(df: pd.DataFrame, metrics: dict) -> None:
             "Return Rate (%)", "Partial Amounts (৳)",
         ],
         "Value": [
-            int(metrics.get("total_issues", 0)), int(metrics.get("return_count", 0)),
-            int(metrics.get("paid_return_count", 0)), int(metrics.get("non_paid_return_count", 0)),
-            int(metrics.get("partial_count", 0)), int(metrics.get("exchange_count", 0)),
-            "", float(metrics.get("return_rate", 0.0)), float(metrics.get("partial_amounts", 0.0)),
+            int(float(_safe_scalar(metrics.get("total_issues", 0)))), int(float(_safe_scalar(metrics.get("return_count", 0)))),
+            int(float(_safe_scalar(metrics.get("paid_return_count", 0)))), int(float(_safe_scalar(metrics.get("non_paid_return_count", 0)))),
+            int(float(_safe_scalar(metrics.get("partial_count", 0)))), int(float(_safe_scalar(metrics.get("exchange_count", 0)))),
+            "", float(_safe_scalar(metrics.get("return_rate", 0.0))), float(_safe_scalar(metrics.get("partial_amounts", 0.0))),
         ]
     }
     summary_df = pd.DataFrame(summary_data)
@@ -1426,13 +1465,13 @@ def _render_export(df: pd.DataFrame, metrics: dict) -> None:
     reason_df = pd.DataFrame([{"Reason": k, "Count": v} for k, v in reasons.items()]).sort_values("Count", ascending=False) if reasons else pd.DataFrame()
 
     insights_list = [
-        f"FINANCIAL INTEGRITY: ৳{float(metrics.get('total_loss', 0)):,.0f} total lost to {int(metrics.get('return_count', 0))} returns and {int(metrics.get('partial_count', 0))} partials.",
-        f"REVENUE YIELD: {float(metrics.get('net_yield_pct', 0)):.1f}% net yield efficiency.",
-        f"ATTRIBUTION: {float(metrics.get('attribution_confidence_pct', 0)):.1f}% financial attribution confidence to actual WooCommerce orders."
+        f"FINANCIAL INTEGRITY: ৳{float(_safe_scalar(metrics.get('total_loss', 0))):,.0f} total lost to {int(float(_safe_scalar(metrics.get('return_count', 0))))} returns and {int(float(_safe_scalar(metrics.get('partial_count', 0))))} partials.",
+        f"REVENUE YIELD: {float(_safe_scalar(metrics.get('net_yield_pct', 0))):.1f}% net yield efficiency.",
+        f"ATTRIBUTION: {float(_safe_scalar(metrics.get('attribution_confidence_pct', 0))):.1f}% financial attribution confidence to actual WooCommerce orders."
     ]
     if reasons:
         top_reason = list(reasons.keys())[0]
-        insights_list.append(f"PREDICTION: '{top_reason}' is the dominant return reason. Address this to recapture up to ৳{float(metrics.get('full_return_loss', 0)) * 0.3:,.0f} monthly.")
+        insights_list.append(f"PREDICTION: '{top_reason}' is the dominant return reason. Address this to recapture up to ৳{float(_safe_scalar(metrics.get('full_return_loss', 0))) * 0.3:,.0f} monthly.")
     insights_df = pd.DataFrame({"AI Analytics & Recommendations": insights_list})
 
     export_cols = ["date", "order_id_raw", "order_id", "issue_type", "return_reason", "product_details", "customer_reason", "courier_reason", "courier", "fu_status", "inventory_updated", "partial_amount"]
@@ -1487,7 +1526,7 @@ def _render_skeleton():
     """, unsafe_allow_html=True)
 
 
-def _trigger_background_load(sync_window: str, sales_df: pd.DataFrame):
+def _trigger_background_load(sync_window: str, sales_df: pd.DataFrame, force_refresh: bool = False):
     """Trigger the background loading thread."""
     from threading import Thread
     # Note: add_script_run_context is imported at module level
@@ -1497,7 +1536,7 @@ def _trigger_background_load(sync_window: str, sales_df: pd.DataFrame):
     
     thread = Thread(
         target=_load_returns_async, 
-        args=(sync_window, sales_df), 
+        args=(sync_window, sales_df, force_refresh), 
         daemon=True
     )
     add_script_run_context(thread)

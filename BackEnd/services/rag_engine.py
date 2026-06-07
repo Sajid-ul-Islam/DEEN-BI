@@ -349,8 +349,12 @@ class RAGAgent:
         3. If the provided data does not contain the answer and you suspect older or more comprehensive data is needed, output EXACTLY the string `[TOOL_CALL: FETCH_MORE_HISTORY]` and nothing else.
         4. If the user's prompt is explicitly or implicitly correcting your logic or providing a new rule, output EXACTLY the string `[TOOL_CALL: REMEMBER_RULE]` on its own line, followed by the concise rule to remember on the next line.
         5. If the user asks for a chart, graph, or visualization, output EXACTLY the string `[TOOL_CALL: GENERATE_PLOTLY]` on its own line, then provide your reasoning, and finally output valid Python Plotly code inside a ```python block.
-        6. Formulate your reasoning internally.
-        7. Provide the final response to the user.
+        6. If the user asks for DuckDB SQL Analytics, In-Memory Data Transformation, or Data Export & Download, output EXACTLY the string `[TOOL_CALL: EXECUTE_PYTHON]` on its own line, then output valid Python code inside a ```python block.
+           - You have access to `duckdb`, `pd`, and dataframes: `sales_df`, `returns_df`, `stock_df`.
+           - To query parquet snapshots directly with DuckDB, you can use `duckdb.query("SELECT * FROM 'BackEnd/cache/*/woo_orders.parquet'").df()`.
+           - If asked to export data, assign your final pandas dataframe to a variable named `export_df`.
+        7. Formulate your reasoning internally.
+        8. Provide the final response to the user.
         
         CRITICAL RULES:
         - Order Logic: An `order_id` represents a single unique order. An order may contain multiple item lines. You must NEVER count item rows as a single order. When asked for 'total orders' or 'number of orders', you must use the total_orders from the GLOBAL AGGREGATES, NOT the row count.
@@ -361,6 +365,7 @@ class RAGAgent:
         When queried about top-performing items, sales rankings, or categories, present the data in a clean Markdown table.
         If the user asks for a trend, ASCII chart, or textual graph, utilize the pre-calculated `recent_trend_chart_markdown` from the global aggregates.
         If the user explicitly asks for an interactive chart or visualization, you must use the `[TOOL_CALL: GENERATE_PLOTLY]` tool and define the data inline based on the records.
+        If the user explicitly asks for a CSV download or data transformation, use the `[TOOL_CALL: EXECUTE_PYTHON]` tool.
         """
         
         GLOBAL_TIMEOUT = 15

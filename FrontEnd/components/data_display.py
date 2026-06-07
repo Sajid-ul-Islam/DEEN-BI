@@ -147,18 +147,36 @@ def render_ai_pilot_chat_ui(sales_df: pd.DataFrame, returns_df: pd.DataFrame = N
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
             # Re-render any historical Plotly charts detected
-            if message["role"] == "assistant" and "[TOOL_CALL: GENERATE_PLOTLY]" in message.get("content", "") and "```python" in message.get("content", ""):
+            if message["role"] == "assistant" and ("[TOOL_CALL: GENERATE_PLOTLY]" in message.get("content", "") or "[TOOL_CALL: EXECUTE_PYTHON]" in message.get("content", "")) and "```python" in message.get("content", ""):
                 code_blocks = re.findall(r'```python\n(.*?)\n```', message["content"], re.DOTALL)
                 for code in code_blocks:
-                    if "plotly" in code.lower():
-                        try:
-                            local_vars = {"pd": pd, "df": sales_df.copy() if isinstance(sales_df, pd.DataFrame) else pd.DataFrame()}
-                            safe_code = code.replace("fig.show()", "")
-                            exec(safe_code, globals(), local_vars)
-                            if "fig" in local_vars:
-                                st.plotly_chart(local_vars["fig"], use_container_width=True)
-                        except Exception as e:
-                            st.error(f"Could not render chart from history: {e}")
+                    try:
+                        import duckdb
+                        local_vars = {
+                            "pd": pd, 
+                            "duckdb": duckdb,
+                            "sales_df": sales_df.copy() if isinstance(sales_df, pd.DataFrame) else pd.DataFrame(),
+                            "returns_df": returns_df.copy() if isinstance(returns_df, pd.DataFrame) else pd.DataFrame(),
+                            "stock_df": stock_df.copy() if isinstance(stock_df, pd.DataFrame) else pd.DataFrame(),
+                            "export_df": None,
+                            "df": sales_df.copy() if isinstance(sales_df, pd.DataFrame) else pd.DataFrame()
+                        }
+                        safe_code = code.replace("fig.show()", "")
+                        exec(safe_code, globals(), local_vars)
+                        if "fig" in local_vars:
+                            st.plotly_chart(local_vars["fig"], use_container_width=True)
+                        if "export_df" in local_vars and isinstance(local_vars["export_df"], pd.DataFrame) and not local_vars["export_df"].empty:
+                            st.dataframe(local_vars["export_df"], use_container_width=True)
+                            csv = local_vars["export_df"].to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Download Result CSV",
+                                data=csv,
+                                file_name=f"pilot_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                key=f"export_hist_{hash(code)}"
+                            )
+                    except Exception as e:
+                        st.error(f"Could not render/execute code from history: {e}")
 
     # Accept user input
     if prompt := st.chat_input("e.g., 'What are my top 5 selling products?'", key=f"chat_input_{key_prefix}"):
@@ -199,19 +217,39 @@ def render_ai_pilot_chat_ui(sales_df: pd.DataFrame, returns_df: pd.DataFrame = N
                         time.sleep(0.015)
                 st.write_stream(stream_data(response))
                 
-                # Execute any newly generated Plotly code
-                if "[TOOL_CALL: GENERATE_PLOTLY]" in response and "```python" in response:
+                # Execute any newly generated Python code (Plotly / DuckDB / Pandas)
+                if ("[TOOL_CALL: GENERATE_PLOTLY]" in response or "[TOOL_CALL: EXECUTE_PYTHON]" in response) and "```python" in response:
                     code_blocks = re.findall(r'```python\n(.*?)\n```', response, re.DOTALL)
                     for code in code_blocks:
-                        if "plotly" in code.lower():
-                            try:
-                                local_vars = {"pd": pd, "df": sales_df.copy() if isinstance(sales_df, pd.DataFrame) else pd.DataFrame()}
-                                safe_code = code.replace("fig.show()", "")
-                                exec(safe_code, globals(), local_vars)
-                                if "fig" in local_vars:
-                                    st.plotly_chart(local_vars["fig"], use_container_width=True)
-                            except Exception as e:
-                                st.error(f"Could not render chart: {e}")
+                        try:
+                            import duckdb
+                            local_vars = {
+                                "pd": pd,
+                                "duckdb": duckdb,
+                                "sales_df": sales_df.copy() if isinstance(sales_df, pd.DataFrame) else pd.DataFrame(),
+                                "returns_df": returns_df.copy() if isinstance(returns_df, pd.DataFrame) else pd.DataFrame(),
+                                "stock_df": stock_df.copy() if isinstance(stock_df, pd.DataFrame) else pd.DataFrame(),
+                                "export_df": None,
+                                "df": sales_df.copy() if isinstance(sales_df, pd.DataFrame) else pd.DataFrame()
+                            }
+                            safe_code = code.replace("fig.show()", "")
+                            exec(safe_code, globals(), local_vars)
+                            
+                            if "fig" in local_vars:
+                                st.plotly_chart(local_vars["fig"], use_container_width=True)
+                                
+                            if "export_df" in local_vars and isinstance(local_vars["export_df"], pd.DataFrame) and not local_vars["export_df"].empty:
+                                st.dataframe(local_vars["export_df"], use_container_width=True)
+                                csv = local_vars["export_df"].to_csv(index=False).encode('utf-8')
+                                st.download_button(
+                                    label="📥 Download Result CSV",
+                                    data=csv,
+                                    file_name=f"pilot_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    key=f"export_live_{hash(code)}"
+                                )
+                        except Exception as e:
+                            st.error(f"Execution Error: {e}")
                 
                 st.feedback("thumbs", key=f"feedback_{len(st.session_state[chat_key])}")
         

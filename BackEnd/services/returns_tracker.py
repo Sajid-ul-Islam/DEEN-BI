@@ -92,7 +92,9 @@ def _get_last_cached_date() -> Optional[datetime]:
     cached_df = _load_cached_returns()
     if cached_df.empty or "date" not in cached_df.columns:
         return None
-    last_date = cached_df["date"].max()
+    # Safeguard against future date typos in the sheet blocking future syncs
+    valid_dates = cached_df["date"][cached_df["date"] <= pd.Timestamp(datetime.now() + timedelta(days=1))]
+    last_date = valid_dates.max() if not valid_dates.empty else None
     return last_date if pd.notna(last_date) else None
 
 
@@ -300,6 +302,7 @@ def load_returns_data(
     url: Optional[str] = None,
     sync_window: str = "",
     sales_df: Optional[pd.DataFrame] = None,
+    force_refresh: bool = False,
 ) -> pd.DataFrame:
     """Load and clean returns/delivery-issue data with incremental caching.
 
@@ -322,8 +325,13 @@ def load_returns_data(
         return _generate_demo_returns()
 
     # ── Load cached historical data ──
-    cached_df = _load_cached_returns()
-    last_cached_date = _get_last_cached_date()
+    if force_refresh:
+        cached_df = pd.DataFrame()
+        last_cached_date = None
+        logger.info("Force refresh requested, ignoring backend cache.")
+    else:
+        cached_df = _load_cached_returns()
+        last_cached_date = _get_last_cached_date()
 
     logger.info(f"Cached returns: {len(cached_df)} rows, last date: {last_cached_date}")
 
@@ -565,6 +573,13 @@ def cross_reference_return_items(
         logger.warning("No WooCommerce data available for cross-referencing")
         return returns_df
 
+    # --- Fuzzy Matching Setup ---
+    try:
+        from rapidfuzz import process, fuzz
+        RAPIDFUZZ_AVAILABLE = True
+    except ImportError:
+        RAPIDFUZZ_AVAILABLE = False
+
     # Enhance returned_items with SKU matching
     enhanced_items = []
     for _, row in returns_df.iterrows():
@@ -590,17 +605,32 @@ def cross_reference_return_items(
 
             # Try to match with WooCommerce item
             matched = False
-            for _, wc_item in wc_items.iterrows():
-                wc_name = str(wc_item.get("item_name") or "").lower().strip()
-                wc_sku = str(wc_item.get("sku") or "N/A")
 
-                # Match by name similarity or SKU in name
-                if item_name in wc_name or wc_name in item_name or wc_sku.lower() in item_name:
-                    item["sku"] = wc_sku
-                    item["price"] = wc_item.get("price", 0)
-                    item["matched_from_wc"] = True
-                    matched = True
-                    break
+            # --- FUZZY MATCHING (PRIORITY 1) ---
+            if RAPIDFUZZ_AVAILABLE and not wc_items.empty:
+                wc_item_names = wc_items["item_name"].tolist()
+                if wc_item_names:
+                    best_match = process.extractOne(item_name, wc_item_names, scorer=fuzz.WRatio, score_cutoff=80)
+                    if best_match:
+                        matched_wc_name = best_match[0]
+                        wc_item_row = wc_items[wc_items["item_name"] == matched_wc_name].iloc[0]
+                        
+                        item["sku"] = str(wc_item_row.get("sku") or "N/A")
+                        item["price"] = wc_item_row.get("price", 0)
+                        item["matched_from_wc"] = True
+                        matched = True
+
+            # --- SUBSTRING MATCHING (FALLBACK) ---
+            if not matched:
+                for _, wc_item in wc_items.iterrows():
+                    wc_name = str(wc_item.get("item_name") or "").lower().strip()
+                    wc_sku = str(wc_item.get("sku") or "N/A")
+                    if item_name in wc_name or wc_name in item_name or wc_sku.lower() in item_name:
+                        item["sku"] = wc_sku
+                        item["price"] = wc_item.get("price", 0)
+                        item["matched_from_wc"] = True
+                        matched = True
+                        break
 
             if not matched:
                 item["matched_from_wc"] = False
@@ -826,6 +856,26 @@ def _normalize_product_names(details: str, stock_df: Optional[pd.DataFrame] = No
                         sku = stock_sku
                         item = '-'.join(dash_parts[:-1]).strip()
                         break
+
+        # --- STEP 2.5: Fuzzy Match Fallback ---
+        if sku == "N/A" and stock_df is not None and not stock_df.empty:
+            try:
+                from rapidfuzz import process, fuzz
+                
+                clean_item_name = get_clean_product_name(item)
+                
+                # Use a pre-filtered list of choices for performance
+                choices = stock_df["Name"].tolist()
+                match = process.extractOne(clean_item_name, choices, scorer=fuzz.WRatio, score_cutoff=85)
+                
+                if match:
+                    matched_row = stock_df.iloc[match[2]]
+                    potential_sku = matched_row.get("SKU")
+                    if potential_sku and pd.notna(potential_sku):
+                        sku = str(potential_sku)
+                        item = matched_row.get("Name", item)
+            except ImportError:
+                pass # rapidfuzz not installed, continue without fuzzy matching
 
         # --- STEP 3: Extract Size & Clean Name ---
         _, size = parse_sku_variants(item)

@@ -331,14 +331,12 @@ def render_advanced_sql_terminal(sales_df: pd.DataFrame | None = None, returns_d
         
     # Render chat history
     import re
-    import streamlit.components.v1 as components
-    
     for msg in st.session_state.pilot_chat_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg.get("html_snippets"):
                 for snippet in msg["html_snippets"]:
-                    components.html(snippet, height=450)
+                    st.html(snippet)
             elif msg["role"] == "assistant" and "```python" in msg["content"] and "plotly" in msg["content"]:
                 code_blocks = re.findall(r'```python\n(.*?)\n```', msg["content"], re.DOTALL)
                 for code in code_blocks:

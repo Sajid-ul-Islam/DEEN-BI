@@ -64,9 +64,10 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
             returns_df = st.session_state.get("returns_data", pd.DataFrame())
             if returns_df.empty:
                 try:
-                    from BackEnd.services.returns_tracker import load_returns_data, get_current_sync_window
+                    from FrontEnd.pages.dashboard_lib.returns_tracker import _get_returns_data_with_daily_cache
+                    from BackEnd.services.returns_tracker import get_current_sync_window
                     sync_window = get_current_sync_window()
-                    returns_df = load_returns_data(sync_window=sync_window, sales_df=df_sales)
+                    returns_df = _get_returns_data_with_daily_cache(sync_window=sync_window, sales_df_full=df_sales)
                     st.session_state["returns_data"] = returns_df
                 except Exception:
                     pass
@@ -108,6 +109,10 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
             df_sales["Exchanged_Qty"] = keys.map(order_sku_exchanges).fillna(0.0)
 
         df_sales_matrix = df_sales.copy()
+        
+        # Remove bundles (Combo, Choose Any, etc.) from the performance matrix
+        df_sales_matrix = df_sales_matrix[~df_sales_matrix["Category"].astype(str).str.contains("Bundle", case=False, na=False)]
+        
         if show_master_only:
             df_sales_matrix["Category"] = df_sales_matrix["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
 
@@ -123,6 +128,10 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
         
         if df_prev is not None and not df_prev.empty:
             df_prev_matrix = df_prev.copy()
+            
+            # Remove bundles (Combo, Choose Any, etc.) from the performance matrix
+            df_prev_matrix = df_prev_matrix[~df_prev_matrix["Category"].astype(str).str.contains("Bundle", case=False, na=False)]
+            
             if show_master_only:
                 df_prev_matrix["Category"] = df_prev_matrix["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
 
@@ -304,9 +313,10 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
             returns_data = st.session_state.get("returns_data", pd.DataFrame())
             if returns_data.empty:
                 try:
-                    from BackEnd.services.returns_tracker import load_returns_data, get_current_sync_window
+                    from FrontEnd.pages.dashboard_lib.returns_tracker import _get_returns_data_with_daily_cache
+                    from BackEnd.services.returns_tracker import get_current_sync_window
                     sync_window = get_current_sync_window()
-                    returns_data = load_returns_data(sync_window=sync_window, sales_df=df_sales)
+                    returns_data = _get_returns_data_with_daily_cache(sync_window=sync_window, sales_df_full=df_sales)
                     st.session_state["returns_data"] = returns_data
                 except Exception:
                     pass

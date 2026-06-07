@@ -58,10 +58,9 @@ def inject_command_palette_listener():
         </style>
     """, unsafe_allow_html=True)
     
-    import streamlit.components.v1 as components
-    components.html("""
+    st.html("""
         <script>
-        const doc = window.parent.document;
+        const doc = window.parent ? window.parent.document : window.document;
         doc.addEventListener('keydown', function(e) {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
@@ -71,4 +70,4 @@ def inject_command_palette_listener():
             }
         });
         </script>
-    """, height=0, width=0)
+    """)

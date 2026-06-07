@@ -1,4 +1,4 @@
-import streamlit.components.v1 as components
+import streamlit as st
 
 def lottie_empty_state(message="No data available", height=300):
     html = f"""
@@ -8,7 +8,7 @@ def lottie_empty_state(message="No data available", height=300):
         <div style="margin-top: 15px; font-weight: 600; font-size: 1rem; color: #94a3b8;">{message}</div>
     </div>
     """
-    components.html(html, height=height)
+    st.html(html)
 
 def lottie_search_state(message="No results found", height=300):
     html = f"""
@@ -18,4 +18,4 @@ def lottie_search_state(message="No results found", height=300):
         <div style="margin-top: 15px; font-weight: 600; font-size: 1rem; color: #94a3b8;">{message}</div>
     </div>
     """
-    components.html(html, height=height)
+    st.html(html)
