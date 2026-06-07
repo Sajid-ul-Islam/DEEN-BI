@@ -25,7 +25,7 @@ jobs:
 
     - name: Type checking with MyPy
       run: |
-        mypy --ignore-missing-imports .
+        mypy --config-file pyproject.toml .
 
     - name: Check for Python syntax and indentation errors
       run: |

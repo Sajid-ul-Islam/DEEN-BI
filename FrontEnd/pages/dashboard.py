@@ -54,7 +54,7 @@ def _load_banner_base64() -> str | None:
     return base64.b64encode(banner_path.read_bytes()).decode("ascii")
 
 
-def _render_banner():
+def _render_banner() -> None:
     encoded_string = _load_banner_base64()
     if not encoded_string:
         st.markdown(
@@ -89,7 +89,7 @@ def _render_banner():
     )
 
 
-def _serialize_context_value(value) -> str:
+def _serialize_context_value(value: Any) -> str:
     if isinstance(value, (list, tuple, set)):
         return ",".join(str(item) for item in value)
     return str(value)
@@ -181,7 +181,7 @@ def _filter_stock_by_categories(stock_df: pd.DataFrame, categories: list[str]) -
     return stock_df[mask]
 
 
-def _render_initial_sync_placeholder(start_date_str: str, end_date_str: str, status_message: str):
+def _render_initial_sync_placeholder(start_date_str: str, end_date_str: str, status_message: str) -> None:
     st.markdown(
         """
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px 16px; background: linear-gradient(90deg, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0.05) 100%); border-left: 3px solid #3b82f6; border-radius: 8px;">
@@ -359,7 +359,7 @@ def _enrich_dashboard_data_for_selection(
     return data
 
 
-def render_intelligence_hub_page():
+def render_intelligence_hub_page() -> None:
     _render_banner()
 
     global_sync = st.session_state.pop("global_sync_request", False)
@@ -429,7 +429,7 @@ def render_intelligence_hub_page():
     prev_cust_val = df_prev_comp["customer_key"].nunique() if not df_prev_comp.empty else 0
     prev_avg_orders_val = prev_orders_val / max(1, int(window_config["days_back"]))
 
-    def calc_delta(curr, prev):
+    def calc_delta(curr: float, prev: float) -> tuple[str, float]:
         if not prev or prev <= 0:
             return "", 0
         diff = curr - prev
@@ -445,7 +445,7 @@ def render_intelligence_hub_page():
 
     show_exact = st.session_state.get("global_show_exact", False)
 
-    def format_compact(num):
+    def format_compact(num: float | int) -> str:
         import pandas as pd
         if pd.isna(num): return "0"
         if show_exact:
@@ -739,7 +739,7 @@ def render_intelligence_hub_page():
 
 # --- MERGED COMPONENT LOGIC ---
 
-def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts: int, df_sales: pd.DataFrame = None):
+def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts: int, df_sales: pd.DataFrame | None = None) -> None:
     """Enhanced Customer Intelligence Component with deep-dive analysis.
     
     This enhanced version combines the original segment analysis with
@@ -753,7 +753,7 @@ def render_customer_insight_tab(reg_rev: float, guest_rev: float, total_accounts
 
 # End of Dashboard controller logic
 
-def render_strategic_command_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, customers_df: pd.DataFrame = None):
+def render_strategic_command_page(sales_df: pd.DataFrame, stock_df: pd.DataFrame, customers_df: pd.DataFrame | None = None) -> None:
     """The command interface for advanced strategic analysis and market intelligence."""
     st.markdown('<div class="live-indicator"><span class="live-dot" style="background:#4f46e5; box-shadow: 0 0 10px #4f46e5;"></span>Intelligence Center Active | Strategic Command</div>', unsafe_allow_html=True)
     
