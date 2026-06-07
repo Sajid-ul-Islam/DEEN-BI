@@ -835,42 +835,40 @@ def _render_monthly_trend(df: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch", key=KeyManager.get_key("returns", "monthly_issue_breakdown"))
 
-    # Total trend line
-    total_monthly = (
+    # Total trend line (Daily)
+    total_daily = (
         df.drop_duplicates(subset=["order_id"])
-        .groupby(pd.Grouper(key="date", freq="ME"))
+        .groupby(pd.Grouper(key="date", freq="D"))
         .size()
         .reset_index(name="total_issues")
     )
-    total_monthly["month_label"] = total_monthly["date"].dt.strftime("%b %Y")
 
     fig2 = go.Figure()
     fig2.add_trace(go.Scatter(
-        x=total_monthly["month_label"],
-        y=total_monthly["total_issues"],
+        x=total_daily["date"],
+        y=total_daily["total_issues"],
         mode="lines+markers",
         name="Total Issues",
         line=dict(color="#3b82f6", width=3),
-        marker=dict(size=8),
+        marker=dict(size=4),
     ))
     
     # Also add Net Returns value if available (just count of actual returns)
     return_mask = df["issue_type"].isin(["Paid Return", "Non Paid Return"])
-    return_monthly = (
+    return_daily = (
         df[return_mask].drop_duplicates(subset=["order_id"])
-        .groupby(pd.Grouper(key="date", freq="ME"))
+        .groupby(pd.Grouper(key="date", freq="D"))
         .size()
         .reset_index(name="return_issues")
     )
-    if not return_monthly.empty:
-        return_monthly["month_label"] = return_monthly["date"].dt.strftime("%b %Y")
+    if not return_daily.empty:
         fig2.add_trace(go.Scatter(
-            x=return_monthly["month_label"],
-            y=return_monthly["return_issues"],
+            x=return_daily["date"],
+            y=return_daily["return_issues"],
             mode="lines+markers",
             name="True Returns",
             line=dict(color="#ef4444", width=3, dash="dot"),
-            marker=dict(size=8),
+            marker=dict(size=4),
         ))
 
     fig2.update_layout(

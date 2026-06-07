@@ -310,18 +310,18 @@ def _render_order_metrics(metrics: Dict[str, Any], customer_data: Dict[str, Any]
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        ui.icon_metric("Total Orders", f"{metrics.get('total_orders', 0):,}", icon="🛒")
+        ui.metric_highlight("Total Orders", f"{metrics.get('total_orders', 0):,}", icon="🛒")
     
     with col2:
-        ui.icon_metric("Total Items", f"{metrics.get('total_items', 0):,}", icon="📦")
+        ui.metric_highlight("Total Items", f"{metrics.get('total_items', 0):,}", icon="📦")
     
     with col3:
         total_value = metrics.get("total_value", 0)
-        ui.icon_metric("Total Value", format_currency(total_value), icon="💰")
+        ui.metric_highlight("Total Value", format_currency(total_value), icon="💰")
     
     with col4:
         aov = metrics.get("avg_order_value", 0)
-        ui.icon_metric("Average Order", format_currency(aov), icon="💳")
+        ui.metric_highlight("Average Order", format_currency(aov), icon="💳")
     
     # Additional metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -330,27 +330,26 @@ def _render_order_metrics(metrics: Dict[str, Any], customer_data: Dict[str, Any]
         first_order = metrics.get("first_order_date")
         if first_order and not pd.isna(first_order):
             first_str = format_wc_date(first_order, "%Y-%m-%d")
-            ui.icon_metric("First Order Date", first_str, icon="🗓️")
+            ui.metric_highlight("First Order Date", first_str, icon="🗓️")
     
     with col2:
         last_order = metrics.get("last_order_date")
         if last_order and not pd.isna(last_order):
             last_str = format_wc_date(last_order, "%Y-%m-%d")
-            ui.icon_metric("Last Order Date", last_str, icon="🗓️")
+            ui.metric_highlight("Last Order Date", last_str, icon="🗓️")
             
     with col3:
         return_count = customer_data.get("return_count", 0)
         return_rate = customer_data.get("return_rate", 0.0)
-        ui.icon_metric(
-            "Return Rate", f"{return_rate:.1%}", icon="🔄",
-            delta=f"{return_count} orders", delta_val=return_count,
-            delta_color="inverse" if return_count > 0 else "off"
+        ui.metric_highlight(
+            label="Return Rate", value=f"{return_rate:.1%}", icon="🔄",
+            help_text=f"{return_count} returned orders"
         )
 
     with col4:
         lifespan = metrics.get("customer_lifespan_days", 0)
         if lifespan > 0:
-            ui.icon_metric("Customer Lifespan", f"{lifespan} days", icon="⏳")
+            ui.metric_highlight("Customer Lifespan", f"{lifespan} days", icon="⏳")
     
     st.markdown("---")
 
