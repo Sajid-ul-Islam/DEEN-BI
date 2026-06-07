@@ -1,3 +1,12 @@
+---
+title: DEEN BI
+emoji: 📊
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+app_file: app.py
+pinned: false
+---
 # 📊 DEEN Business Intelligence
 ### **AI-Powered Predictive Operations Intelligence System**
 

@@ -1,20 +1,3 @@
-{
-  "description": "AI-Powered Predictive Operations Intelligence System for E-commerce - Automated ML forecasting, inventory intelligence, and customer insights",
-  "topics": [
-    "streamlit",
-    "machine-learning",
-    "business-intelligence",
-    "ecommerce",
-    "python",
-    "timeseries-forecasting",
-    "automl",
-    "inventory-management",
-    "customer-insights",
-    "dashboard",
-    "woocommerce",
-    "ai-agent"
-  ],
-  "website": "https://deen-ops.streamlit.app/",
-  "projects_url": "https://github.com/users/Sajid-ul-Islam/projects/1",
-  "has_wiki": false
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:607d39e4e3fa28f484e70ab18c697af66d7e0342e6e6735a34aa341f0327e8ae
+size 594
