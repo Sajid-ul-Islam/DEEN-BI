@@ -14,5 +14,5 @@ jobs:
       - uses: huggingface/hub-sync@v0.1.0
         with:
           github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: YOUR_HF_USERNAME/YOUR_SPACE_NAME   # Replace with your details
+          huggingface_repo_id: Sajid-ul-Islam/DEEN-BI
           hf_token: ${{ secrets.HF_TOKEN }}
