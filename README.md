@@ -175,6 +175,16 @@ pytest tests/ -v --tb=short
 
 [![CI](https://github.com/Sajid-ul-Islam/DEEN-BI/actions/workflows/ci.yml/badge.svg)](https://github.com/Sajid-ul-Islam/DEEN-BI/actions/workflows/ci.yml)
 
+## 🤗 Hugging Face Deployment
+
+DEEN-BI is mirrored to [Hugging Face Spaces](https://huggingface.co/spaces/Sajid-ul-Islam/DEEN-BI) via an automated sync workflow.
+
+- **Space**: `Sajid-ul-Islam/DEEN-BI`
+- **Trigger**: Automatically syncs on every push to `main`, or can be triggered manually via the Actions tab.
+- **Secret required**: `HF_TOKEN` must be added to the repository's GitHub Actions secrets.
+
+The sync is handled by `.github/workflows/sync-to-hub.yml` using the [`huggingface/hub-sync`](https://github.com/huggingface/hub-sync) action.
+
 ---
 **Engineered with precision for DEEN Commerce.**
 *Primary Developer: Sajid Islam*
