@@ -475,6 +475,10 @@ def render_intelligence_hub_page() -> None:
     st.markdown("<br>", unsafe_allow_html=True)
 
     if selection == "💎 Sales Overview":
+        from .dashboard_lib.bi_analytics import render_category_performance_matrix
+        render_category_performance_matrix(data["sales_active"], data["prev_sales_active"], window_label=data["window_label"])
+        st.divider()
+
         # --- Sales Integrity Gap Chart ---
         from BackEnd.services.returns_tracker import calculate_net_sales_metrics
         import plotly.graph_objects as go
