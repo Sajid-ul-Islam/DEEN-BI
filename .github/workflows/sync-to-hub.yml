@@ -11,7 +11,7 @@ jobs:
         with:
           fetch-depth: 0   # Fetches the entire history to ensure a proper sync
           lfs: true        # Necessary if you have large files tracked with Git LFS
-      - uses: huggingface/hub-sync@v0.1.0
+      - uses: huggingface/hub-sync@v0.2.0
         with:
           github_repo_id: ${{ github.repository }}
           huggingface_repo_id: Sajid-ul-Islam/DEEN-BI   # Replace with your details
