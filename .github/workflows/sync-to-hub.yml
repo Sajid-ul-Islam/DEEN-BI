@@ -7,7 +7,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # Fetches the entire history to ensure a proper sync
           lfs: true        # Necessary if you have large files tracked with Git LFS
