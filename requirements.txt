@@ -1,37 +1,4 @@
-scikit-learn
-langchain
-langchain-community
-faiss-cpu
-unstructured
-openpyxl
-pandas
-polars
-numpy
-streamlit
-streamlit-autorefresh
-plotly
-statsmodels
-sqlparse
-prophet
-xgboost
-woocommerce
-duckdb
-rapidfuzz
-dateparser
-google-api-python-client
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-openai
-pyshorteners
-python-dotenv
-requests
-XlsxWriter
-pyarrow
-gcsfs
-Pillow
-beautifulsoup4
-mypy
-pytest
-ruff
-black
+-e .
+
+# Dev dependencies (optional)
+# pip install -e ".[dev]"
