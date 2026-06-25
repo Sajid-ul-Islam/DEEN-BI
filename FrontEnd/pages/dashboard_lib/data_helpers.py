@@ -58,7 +58,9 @@ def build_order_level_dataset(df: pd.DataFrame) -> pd.DataFrame:
     
     # Clean Pandas NA to None for seamless Polars conversion
     sales_clean = sales.copy()
-    sales_clean["order_id"] = sales_clean["order_id"].astype(str).str.strip().replace(["", "nan", "None", "NaN", "<NA>"], None)
+    order_id_clean = sales_clean["order_id"].astype(str).str.strip()
+    import numpy as np
+    sales_clean["order_id"] = np.where(order_id_clean.isin(["", "nan", "None", "NaN", "<NA>"]), None, order_id_clean)
     
     # Supercharge GroupBy utilizing Polars LazyFrame
     lz_df = pl.from_pandas(sales_clean).lazy()

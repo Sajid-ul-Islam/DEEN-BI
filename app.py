@@ -1,4 +1,5 @@
 import os
+import traceback
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -399,7 +400,16 @@ def _render_primary_navigation():
             st.warning("Dashboard page loaded, but no standard render function was found (`render_dashboard_tab`, `main`, etc.).")
             
     except Exception as e:
-        st.error(f"Failed to load dashboard: {e}")
+        if "weakref" in str(e):
+            log_error(e, context="Dashboard Render (weakref)")
+            st.error("A critical error occurred while rendering the dashboard, likely due to a data caching issue.")
+            st.warning("This is often a temporary issue related to expiring data references.")
+            if st.button("Clear Cache and Rerun", icon="🚨", type="primary"):
+                st.session_state.clear()
+                st.rerun()
+            st.code(f"Error details: {e}\n\nTraceback:\n{traceback.format_exc()}")
+        else:
+            st.error(f"Failed to load dashboard: {e}")
 
 def _render_global_chat():
     """Renders a full-width AI Data Pilot chat expander at the bottom of the main screen."""
