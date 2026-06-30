@@ -9,7 +9,7 @@ from pathlib import Path
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import DirectoryLoader, CSVLoader, UnstructuredExcelLoader
+from langchain_community.document_loaders import DirectoryLoader, CSVLoader
 from BackEnd.core.logging_config import get_logger
 
 logger = get_logger("rag_engine")
@@ -22,6 +22,22 @@ class LangChainEmbeddingWrapper:
         return self.agent._get_embeddings(texts).tolist()
     def embed_query(self, text: str) -> List[float]:
         return self.agent._get_embeddings([text])[0].tolist()
+
+class PandasExcelLoader:
+    """A lightweight Excel loader using pandas, replacing unstructured."""
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+
+    def load(self) -> List[Document]:
+        df = pd.read_excel(self.file_path)
+        docs = []
+        for index, row in df.iterrows():
+            row_dict = row.dropna().to_dict()
+            if not row_dict:
+                continue
+            text_chunk = ", ".join([f"{k}: {v}" for k, v in row_dict.items()])
+            docs.append(Document(page_content=text_chunk, metadata={"source": str(self.file_path), "row_index": index}))
+        return docs
 
 class RAGAgent:
     """Retrieval-Augmented Generation Agent for Data Pilot."""
@@ -177,11 +193,10 @@ class RAGAgent:
             dir_path.mkdir(parents=True, exist_ok=True)
             return
 
-        # Define loaders for different file types
         loaders = {
             "*.csv": DirectoryLoader(path, glob="*.csv", loader_cls=CSVLoader),
-            "*.xlsx": DirectoryLoader(path, glob="*.xlsx", loader_cls=UnstructuredExcelLoader),
-            "*.xls": DirectoryLoader(path, glob="*.xls", loader_cls=UnstructuredExcelLoader)
+            "*.xlsx": DirectoryLoader(path, glob="*.xlsx", loader_cls=PandasExcelLoader),
+            "*.xls": DirectoryLoader(path, glob="*.xls", loader_cls=PandasExcelLoader)
         }
 
         all_docs = []

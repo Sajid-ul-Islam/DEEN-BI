@@ -30,7 +30,6 @@ openai>=2.29.0
 langchain
 langchain-community
 faiss-cpu
-unstructured
 sqlparse
 
 # Performance and Utilities

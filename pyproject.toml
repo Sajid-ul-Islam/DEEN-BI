@@ -55,7 +55,6 @@ dependencies = [
     "langchain",
     "langchain-community",
     "faiss-cpu",
-    "unstructured",
     "sqlparse",
     # Performance and Utilities
     "polars>=1.39.3",

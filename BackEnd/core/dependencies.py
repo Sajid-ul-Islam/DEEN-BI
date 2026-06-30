@@ -8,7 +8,6 @@ REQUIRED_PACKAGES = [
     ("langchain_community", "langchain-community"),
     ("faiss", "faiss-cpu"),
     ("openpyxl", "openpyxl"),
-    ("unstructured", "unstructured"),
     ("statsmodels", "statsmodels"),
     ("prophet", "prophet"),
     ("xgboost", "xgboost"),
