@@ -301,7 +301,19 @@ def _generate_demo_returns() -> pd.DataFrame:
     return df
 
 
-@st.cache_data(show_spinner=False, max_entries=2)
+def _hash_df_safe(df) -> str:
+    """Safe fingerprint for DataFrames that may contain unhashable array-type columns."""
+    if df is None or (hasattr(df, "empty") and df.empty):
+        return "empty"
+    try:
+        import hashlib
+        sig = f"{df.shape}|{list(df.columns)}|{list(df.dtypes.astype(str))}"
+        return hashlib.md5(sig.encode()).hexdigest()
+    except Exception:
+        return "unknown"
+
+
+@st.cache_data(show_spinner=False, max_entries=2, hash_funcs={pd.DataFrame: _hash_df_safe})
 def load_returns_data(
     url: Optional[str] = None,
     sync_window: str = "",
