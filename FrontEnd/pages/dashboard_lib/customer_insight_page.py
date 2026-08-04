@@ -281,6 +281,199 @@ def _get_global_date_range() -> tuple[date, date]:
     if hasattr(end_dt, "date"): end_dt = end_dt.date()
     return start_dt, end_dt
 
+def _render_new_vs_returning(sales_df: pd.DataFrame, start_date: date, end_date: date) -> None:
+    """Render New vs Returning Customer breakdown for the current time window.
+
+    Definition:
+        New Customer      — their FIRST-EVER order falls within [start_date, end_date].
+        Returning Customer — ordered in [start_date, end_date] but had a prior order before start_date.
+    """
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from FrontEnd.components.charts import apply_plotly_theme
+
+    st.markdown("#### 🆕 New vs Returning Customers")
+    st.caption(
+        f"Period: **{start_date}** → **{end_date}** · "
+        "A customer is _New_ if their very first order falls in this window."
+    )
+
+    # ── Data prep ─────────────────────────────────────────────────────────────
+    required = {"customer_key", "order_date", "order_id"}
+    if sales_df.empty or not required.issubset(sales_df.columns):
+        st.info("📭 Not enough data to compute New vs Returning breakdown.")
+        return
+
+    df = sales_df.copy()
+    df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+    df = df.dropna(subset=["order_date", "customer_key"])
+    df["order_day"] = df["order_date"].dt.date
+
+    # All-time first order per customer (use the full df — no date filter yet)
+    first_orders = df.groupby("customer_key")["order_day"].min().rename("first_order_day")
+
+    # Customers active in the selected window
+    window_mask = (df["order_day"] >= start_date) & (df["order_day"] <= end_date)
+    window_df = df[window_mask].copy()
+
+    if window_df.empty:
+        st.info("📭 No orders found in the selected time window.")
+        return
+
+    window_customers = window_df["customer_key"].unique()
+    first_orders_window = first_orders.reindex(window_customers)
+
+    new_customers = first_orders_window[first_orders_window >= start_date].index
+    returning_customers = first_orders_window[first_orders_window < start_date].index
+
+    new_count = len(new_customers)
+    returning_count = len(returning_customers)
+    total = new_count + returning_count
+    new_pct = (new_count / total * 100) if total else 0
+    returning_pct = (returning_count / total * 100) if total else 0
+
+    # Revenue split
+    if "item_revenue" in window_df.columns:
+        new_rev = window_df[window_df["customer_key"].isin(new_customers)]["item_revenue"].sum()
+        ret_rev = window_df[window_df["customer_key"].isin(returning_customers)]["item_revenue"].sum()
+    else:
+        new_rev = ret_rev = 0.0
+
+    # Avg orders per customer type
+    new_orders = window_df[window_df["customer_key"].isin(new_customers)]["order_id"].nunique()
+    ret_orders = window_df[window_df["customer_key"].isin(returning_customers)]["order_id"].nunique()
+    avg_orders_new = new_orders / max(new_count, 1)
+    avg_orders_ret = ret_orders / max(returning_count, 1)
+
+    # ── KPI Cards ─────────────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        ui.metric_highlight(
+            label="🆕 New Customers",
+            value=f"{new_count:,}",
+            help_text=f"{new_pct:.1f}% of period customers",
+            icon="✨",
+        )
+    with c2:
+        ui.metric_highlight(
+            label="🔄 Returning Customers",
+            value=f"{returning_count:,}",
+            help_text=f"{returning_pct:.1f}% of period customers",
+            icon="💎",
+        )
+    with c3:
+        ui.metric_highlight(
+            label="📦 Avg Orders · New",
+            value=f"{avg_orders_new:.1f}",
+            help_text=f"TK {new_rev:,.0f} total revenue" if new_rev else "Revenue N/A",
+            icon="🛒",
+        )
+    with c4:
+        ui.metric_highlight(
+            label="📦 Avg Orders · Returning",
+            value=f"{avg_orders_ret:.1f}",
+            help_text=f"TK {ret_rev:,.0f} total revenue" if ret_rev else "Revenue N/A",
+            icon="🏆",
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Charts ────────────────────────────────────────────────────────────────
+    col_donut, col_trend = st.columns([1, 2])
+
+    with col_donut:
+        st.markdown("##### Customer Mix")
+        fig_donut = go.Figure(go.Pie(
+            labels=["🆕 New", "🔄 Returning"],
+            values=[new_count, returning_count],
+            hole=0.55,
+            marker_colors=["#6366f1", "#10b981"],
+            textinfo="label+percent",
+            hovertemplate="%{label}: %{value:,} customers<extra></extra>",
+        ))
+        fig_donut.update_layout(
+            height=280,
+            margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,
+            annotations=[dict(
+                text=f"<b>{total:,}</b><br>total",
+                x=0.5, y=0.5,
+                font_size=15,
+                showarrow=False,
+            )],
+        )
+        fig_donut = apply_plotly_theme(fig_donut)
+        st.plotly_chart(fig_donut, use_container_width=True, key=KeyManager.get_key("ci", "new_ret_donut"))
+
+    with col_trend:
+        st.markdown("##### Daily New vs Returning")
+        # Build daily classification
+        window_df2 = window_df.copy()
+        window_df2["customer_type"] = window_df2["customer_key"].apply(
+            lambda k: "New" if first_orders.get(k, start_date) >= start_date else "Returning"
+        )
+        daily_type = (
+            window_df2.groupby(["order_day", "customer_type"])["customer_key"]
+            .nunique()
+            .reset_index(name="customers")
+        )
+        daily_type["order_day"] = pd.to_datetime(daily_type["order_day"])
+
+        if not daily_type.empty:
+            fig_trend = px.area(
+                daily_type,
+                x="order_day",
+                y="customers",
+                color="customer_type",
+                color_discrete_map={"New": "#6366f1", "Returning": "#10b981"},
+                line_shape="spline",
+                labels={"order_day": "", "customers": "Unique Customers", "customer_type": "Type"},
+            )
+            fig_trend.update_layout(
+                height=280,
+                margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            fig_trend = apply_plotly_theme(fig_trend)
+            st.plotly_chart(fig_trend, use_container_width=True, key=KeyManager.get_key("ci", "new_ret_trend"))
+        else:
+            st.info("Not enough daily data for trend chart.")
+
+    # ── Revenue comparison bar ─────────────────────────────────────────────────
+    if new_rev > 0 or ret_rev > 0:
+        st.markdown("##### Revenue Contribution")
+        rev_df = pd.DataFrame({
+            "Segment": ["🆕 New Customers", "🔄 Returning Customers"],
+            "Revenue (TK)": [new_rev, ret_rev],
+        })
+        fig_rev = px.bar(
+            rev_df,
+            x="Segment",
+            y="Revenue (TK)",
+            color="Segment",
+            color_discrete_map={
+                "🆕 New Customers": "#6366f1",
+                "🔄 Returning Customers": "#10b981",
+            },
+            text_auto=",.0f",
+        )
+        fig_rev.update_layout(
+            height=220,
+            margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,
+        )
+        fig_rev = apply_plotly_theme(fig_rev)
+        st.plotly_chart(fig_rev, use_container_width=True, key=KeyManager.get_key("ci", "new_ret_rev"))
+
+    st.markdown("---")
+
+
 def _render_global_insights(sales_df: pd.DataFrame) -> None:
     """Render the global insights metrics and charts.
     
@@ -361,6 +554,9 @@ def _render_global_insights(sales_df: pd.DataFrame) -> None:
     })
     
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── New vs Returning Customers ────────────────────────────────────────────
+    _render_new_vs_returning(sales_df, start_date, end_date)
 
     # Render EMA Trend Chart for Guest vs Registered
     if 'daily_cohorts' in locals() and not daily_cohorts.empty and True in daily_cohorts.columns and False in daily_cohorts.columns:
