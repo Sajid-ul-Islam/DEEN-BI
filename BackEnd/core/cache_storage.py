@@ -10,6 +10,59 @@ from typing import Any
 import pandas as pd
 
 
+def _bootstrap_from_streamlit_secrets() -> None:
+    """One-time bootstrap: read GCS config from st.secrets if env vars not already set.
+
+    This lets Streamlit Cloud use the same gcp_service_account block from
+    secrets.toml that GA4 uses, without any extra environment variable config.
+
+    Secrets read (all optional):
+        GCS_BUCKET_NAME          — e.g. "deen-bi-cache"  → sets PERSISTENT_CACHE_URI
+        PERSISTENT_CACHE_URI     — full gs:// URI (overrides GCS_BUCKET_NAME)
+        PERSISTENT_CACHE_NAMESPACE — sub-folder, defaults to "shared"
+        [gcp_service_account]    — service account dict used as GCS token
+    """
+    try:
+        import streamlit as st
+        if not (hasattr(st, "secrets") and st.secrets):
+            return
+        sec = dict(st.secrets)
+    except Exception:
+        return
+
+    # 1. Set PERSISTENT_CACHE_URI from secrets if not already in env
+    if not os.environ.get("PERSISTENT_CACHE_URI"):
+        uri = sec.get("PERSISTENT_CACHE_URI") or ""
+        if not uri:
+            bucket = sec.get("GCS_BUCKET_NAME") or ""
+            if bucket:
+                namespace = sec.get("PERSISTENT_CACHE_NAMESPACE", "shared")
+                uri = f"gs://{bucket.strip('/')}/{namespace}"
+                # Store namespace separately too
+                if not os.environ.get("PERSISTENT_CACHE_NAMESPACE"):
+                    os.environ["PERSISTENT_CACHE_NAMESPACE"] = str(namespace)
+        if uri:
+            os.environ["PERSISTENT_CACHE_URI"] = uri
+
+    # 2. Inject GCP service account into env as JSON so _load_gcs_token() picks it up
+    if not os.environ.get("GCS_SERVICE_ACCOUNT_JSON"):
+        sa = sec.get("gcp_service_account")
+        if sa:
+            try:
+                os.environ["GCS_SERVICE_ACCOUNT_JSON"] = json.dumps(dict(sa))
+            except Exception:
+                pass
+
+    # 3. Set GCP project from service account if not already set
+    if not os.environ.get("GCP_PROJECT"):
+        sa = sec.get("gcp_service_account", {})
+        project = sa.get("project_id") if sa else None
+        if project:
+            os.environ["GCP_PROJECT"] = str(project)
+
+
+# Bootstrap on import — runs once, no-ops gracefully if not in Streamlit context
+_bootstrap_from_streamlit_secrets()
 def _remote_cache_root() -> str:
     return os.getenv("PERSISTENT_CACHE_URI", "").strip().rstrip("/")
 

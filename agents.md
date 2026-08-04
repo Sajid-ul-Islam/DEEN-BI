@@ -1,7 +1,7 @@
 # DEEN Commerce BI - AI Agent Coder Guide
 
 > **Purpose**: Comprehensive blueprint for AI agents to understand, navigate, and extend this codebase.
-> **Last Updated**: 2026-06-04
+> **Last Updated**: 2026-08-04
 > **Project**: DEEN Commerce Business Intelligence Dashboard
 > **Auto-Update**: This file is automatically updated via pre-commit hooks and GitHub Actions
 
@@ -411,6 +411,12 @@ pytest tests/ -v
 
 ## 10. Recent Changes (Agent Context)
 
+### 2026-08-04: Python 3.14 Compatibility, Meta Pixel & Customer Intelligence
+- **Python 3.14 Fix**: Upgraded `streamlit==1.42.0` → `streamlit>=1.45.0` in `requirements.txt` and `pyproject.toml`. Streamlit 1.42 called deprecated `asyncio.get_event_loop()` which raises `RuntimeError` on Python 3.14's stricter event loop policy.
+- **Meta Pixel Integration**: Added `_inject_meta_pixel()` in `app.py`. Reads `META_PIXEL_ID` from `st.secrets` (Streamlit Cloud `secrets.toml`) with `os.environ` fallback for local dev. Fires `fbq('init')` + `fbq('track', 'PageView')` on every Streamlit rerun.
+- **DataFrame Cache Hashing Fix**: Added `_hash_df_safe()` helper to `BackEnd/services/returns_tracker.py`. The `load_returns_data()` function's `@st.cache_data` decorator now uses `hash_funcs={pd.DataFrame: _hash_df_safe}` to avoid `TypeError: unhashable type: 'numpy.ndarray'` when hashing DataFrames with list/array-type columns (`returned_items`).
+- **New vs Returning Customer Section**: Added `_render_new_vs_returning()` to `FrontEnd/pages/dashboard_lib/customer_insight_page.py`. Classifies customers in the selected time window as New (first-ever order ≥ window start) or Returning (first order before window). Shows: 4 KPI cards, donut chart, daily area trend, and revenue comparison bar.
+
 ### 2026-05-23: Sub-Category Reporting, Deep Dive Enhancements & Categorization Engine
 - **Sub-Category Reporting**: Implemented dynamic Excel export in `inventory.py` that computes Total Units, Total Sold, Returns, and Exchanges based on `shipped_date` windows. 
 - **Accurate Yield Calculation**: Upgraded `deep_dive.py` to calculate `Exchanged_Qty` and `Exchange_Loss`, integrating them into Net Sales to provide a 100% accurate unit-level P&L.
@@ -490,6 +496,9 @@ pytest tests/ -v
 | Tab not rendering | app.py:102-110 | Check nav_map and selection elif |
 | Background thread crash | Any thread | Wrap in try/except, log errors |
 | Session state error | Any | Check key exists before access |
+| `RuntimeError: no event loop` | Streamlit Cloud (Python 3.14) | Use `streamlit>=1.45.0` in requirements.txt |
+| `unhashable type: numpy.ndarray` | returns_tracker.py cache | Use `hash_funcs={pd.DataFrame: _hash_df_safe}` in `@st.cache_data` |
+| Meta Pixel not firing | app.py `_inject_meta_pixel()` | Set `META_PIXEL_ID` in `secrets.toml`; reads `st.secrets` then `os.environ` |
 
 ---
 
@@ -514,6 +523,17 @@ MAP_FORCE_SNAPSHOT = False   # Map always uses snapshot
 ## 14. CHANGELOG (Version History)
 
 > **Note**: This section contains the project version history from CHANGELOG.md
+
+### Version 2.3.0 (2026-08-04)
+
+#### Features
+- **Meta Pixel Tracking**: `fbq` base code auto-injected via `_inject_meta_pixel()` in `app.py`. Reads `META_PIXEL_ID` from `st.secrets`.
+- **New vs Returning Customer Analysis**: New section in Customer Insight tab with KPI cards, donut, daily trend, and revenue split charts.
+- **Meta Ad Insights Service**: `BackEnd/services/meta_pixel_service.py` — Graph API v21.0 client for campaign-level KPIs (spend, reach, CTR, CPC, ROAS). Pending UI wiring.
+
+#### Fixes
+- **Python 3.14 Compatibility**: `streamlit>=1.45.0` resolves `RuntimeError: no event loop in MainThread`.
+- **Cache Hash Error**: `_hash_df_safe()` in `returns_tracker.py` resolves `TypeError: unhashable type: numpy.ndarray` in `@st.cache_data`.
 
 ### Version 2.2.0 (2026-04-23)
 
@@ -578,14 +598,16 @@ MAP_FORCE_SNAPSHOT = False   # Map always uses snapshot
 ### ✅ Fully Operational
 - **WooCommerce API Sync**: Live & Background caching working efficiently via Polars/Pandas.
 - **Google Analytics 4 (GA4) API Sync**: Live traffic, sessions, conversions, device breakdown, and revenue streaming via `ga4_service.py`.
+- **Meta Pixel Tracking**: Base pixel code injected on every app load via `_inject_meta_pixel()` in `app.py`. Fires `PageView` event. Pixel ID read from `st.secrets["META_PIXEL_ID"]`.
 - **Returns Tracking**: Google Sheets real-time integration with cross-referencing.
 - **Inventory Intelligence**: Restock forecasting, low stock alerts, and Orphan Stock detection.
-- **Customer RFM & Insights**: Lifetime value, loyalty tiering, cohort matrix, and deduplication.
+- **Customer RFM & Insights**: Lifetime value, loyalty tiering, cohort matrix, deduplication, and **New vs Returning Customer** breakdown.
 - **AutoML Forecasting**: Multi-tier ensemble model (ARIMA, Holt-Winters, Naive) with fallback.
 - **Data Pilot Terminal**: In-memory SQLite execution, Plotly code generation, and LLM chat.
 - **Power BI Export**: Multi-sheet Star Schema (.xlsx) generator.
 
 ### ⚠️ Simulated / Mocked Data (Pending Integrations)
+- **Meta Ad Insights**: `BackEnd/services/meta_pixel_service.py` is built and ready. Requires `META_ACCESS_TOKEN` + `META_AD_ACCOUNT_ID` in `secrets.toml` to activate campaign-level KPIs (spend, reach, CTR, ROAS). UI integration in Traffic & Acquisition tab is pending.
 - **VIP Retention Notification**: The "Send Retention Notification" button in the War Room is a UI mockup pending SMS/WhatsApp Gateway integration.
 - **Local LLM Execution**: Deployed Streamlit Cloud apps block `localhost:11434` (Ollama). Native Chatbot defaults to Gemini API or simulated responses in cloud environments.
 
