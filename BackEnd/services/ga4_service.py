@@ -175,3 +175,55 @@ def fetch_ga4_channel_breakdown(start_date: str = "30daysAgo", end_date: str = "
     )
     summary["conversion_rate"] = (summary["conversions"] / summary["sessions"].replace(0, 1)) * 100.0
     return summary.sort_values("sessions", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ga4_aarrr_funnel_metrics(start_date: str = "30daysAgo", end_date: str = "today") -> dict:
+    """Fetch GA4 metrics aggregated for AARRR Pirate Funnel stages."""
+    credentials, property_id = _get_ga4_credentials_and_property()
+    if not credentials or not property_id:
+        return {}
+
+    try:
+        client = BetaAnalyticsDataClient(credentials=credentials)
+
+        request = RunReportRequest(
+            property=property_id,
+            metrics=[
+                Metric(name="sessions"),
+                Metric(name="activeUsers"),
+                Metric(name="newUsers"),
+                Metric(name="engagedSessions"),
+                Metric(name="conversions"),
+                Metric(name="totalRevenue"),
+            ],
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
+        )
+
+        response = client.run_report(request)
+        if not response.rows:
+            return {}
+
+        row = response.rows[0]
+        sessions = int(row.metric_values[0].value or 0)
+        active_users = int(row.metric_values[1].value or 0)
+        new_users = int(row.metric_values[2].value or 0)
+        engaged_sessions = int(row.metric_values[3].value or 0)
+        conversions = int(row.metric_values[4].value or 0)
+        revenue = float(row.metric_values[5].value or 0.0)
+
+        returning_users = max(0, active_users - new_users)
+
+        return {
+            "acquisition_sessions": sessions,
+            "acquisition_users": active_users,
+            "activation_engaged_sessions": engaged_sessions,
+            "retention_returning_users": returning_users,
+            "retention_new_users": new_users,
+            "revenue_conversions": conversions,
+            "revenue_amount": revenue,
+        }
+    except Exception as exc:
+        logger.error(f"Error fetching GA4 AARRR funnel metrics: {exc}")
+        return {}
+

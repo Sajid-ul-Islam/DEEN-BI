@@ -577,6 +577,7 @@ MAP_FORCE_SNAPSHOT = False   # Map always uses snapshot
 
 ### ✅ Fully Operational
 - **WooCommerce API Sync**: Live & Background caching working efficiently via Polars/Pandas.
+- **Google Analytics 4 (GA4) API Sync**: Live traffic, sessions, conversions, device breakdown, and revenue streaming via `ga4_service.py`.
 - **Returns Tracking**: Google Sheets real-time integration with cross-referencing.
 - **Inventory Intelligence**: Restock forecasting, low stock alerts, and Orphan Stock detection.
 - **Customer RFM & Insights**: Lifetime value, loyalty tiering, cohort matrix, and deduplication.
@@ -585,7 +586,6 @@ MAP_FORCE_SNAPSHOT = False   # Map always uses snapshot
 - **Power BI Export**: Multi-sheet Star Schema (.xlsx) generator.
 
 ### ⚠️ Simulated / Mocked Data (Pending Integrations)
-- **Traffic & Acquisition**: Currently simulated using a synthetic 3.2% conversion rate. Pending native Google Analytics 4 (GA4) API integration.
 - **VIP Retention Notification**: The "Send Retention Notification" button in the War Room is a UI mockup pending SMS/WhatsApp Gateway integration.
 - **Local LLM Execution**: Deployed Streamlit Cloud apps block `localhost:11434` (Ollama). Native Chatbot defaults to Gemini API or simulated responses in cloud environments.
 

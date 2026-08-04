@@ -43,7 +43,7 @@ def render_district_map(df_sales: pd.DataFrame):
     
     map_metric = st.segmented_control(
         "Map focus",
-        options=["Revenue", "Orders"],
+        options=["Revenue", "Orders", "COD Return Risk"],
         default="Revenue",
         key=KeyManager.get_key("geo", "map_metric_toggle"),
         label_visibility="collapsed"
@@ -54,11 +54,27 @@ def render_district_map(df_sales: pd.DataFrame):
         spot_raw = df_map.groupby("Display_Region")["order_total"].sum().reset_index().rename(columns={"Display_Region": "Region", "order_total": "Value"})
         color_scale = "Tealgrn"
         labels = {"Value": "Revenue (৳)"}
-    else:
+    elif map_metric == "Orders":
         agg_raw = df_map.groupby("District_Parent")["order_id"].nunique().reset_index().rename(columns={"District_Parent": "District", "order_id": "Value"})
         spot_raw = df_map.groupby("Display_Region")["order_id"].nunique().reset_index().rename(columns={"Display_Region": "Region", "order_id": "Value"})
         color_scale = "Purp"
         labels = {"Value": "Orders"}
+    else:
+        # COD Return Risk calculation per district
+        if "order_status" in df_map.columns:
+            cancelled_mask = df_map["order_status"].astype(str).str.lower().isin(["cancelled", "refunded", "failed", "returned"])
+            risk_df = df_map.groupby("District_Parent").agg(
+                total_orders=("order_id", "nunique"),
+                failed_orders=("order_id", lambda x: df_map.loc[x.index][cancelled_mask.loc[x.index]].nunique())
+            ).reset_index()
+            risk_df["Value"] = (risk_df["failed_orders"] / risk_df["total_orders"].replace(0, 1)) * 100.0
+            agg_raw = risk_df.rename(columns={"District_Parent": "District"})[["District", "Value"]]
+        else:
+            agg_raw = pd.DataFrame(columns=["District", "Value"])
+        spot_raw = agg_raw.rename(columns={"District": "Region"})
+        color_scale = "Reds"
+        labels = {"Value": "Return Risk Rate (%)"}
+
 
     # Merge real data onto the base 64-district set
     agg_df = base_df.merge(agg_raw, on="District", how="left", suffixes=('_base', ''))

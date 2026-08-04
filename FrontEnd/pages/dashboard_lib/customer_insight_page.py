@@ -122,6 +122,8 @@ def _render_analysis_tab() -> None:
 
     # 1. Global Insights (Metrics & Charts) BEFORE filters
     _render_global_insights(sales_df)
+    _render_cohort_ltv_section(sales_df)
+
     
     st.markdown("### 🔍 Filter & Analyze Customers")
     st.caption("Find specific customers by purchase history, spending, and accounts")
@@ -838,5 +840,50 @@ def _format_customer_option(key: str, df: pd.DataFrame, id_col: str = "customer_
     name = row.get("primary_name", row.get("name", "Unknown"))
     orders = row.get("total_orders", 0)
     value = row.get("total_revenue", row.get("total_value", 0))
+    return f"{name} ({orders} orders, ৳{value:,.0f})"
+
+
+def _render_cohort_ltv_section(sales_df: pd.DataFrame) -> None:
+    """Render Cohort LTV Progression Heatmap and Churn Risk Alert Table."""
+    if sales_df.empty:
+        return
+
+    from BackEnd.services.cohort_analytics import calculate_cohort_ltv
+    data = calculate_cohort_ltv(sales_df)
+    cohort_matrix = data["cohort_matrix"]
+    churn_alerts = data["churn_alerts"]
+
+    if cohort_matrix.empty and churn_alerts.empty:
+        return
+
+    st.divider()
+    st.markdown("#### 🔄 Cohort LTV Progression & Retention Heatmap")
+    st.caption("Tracks cumulative revenue generated per customer across monthly acquisition cohorts.")
+
+    if not cohort_matrix.empty:
+        st.dataframe(
+            cohort_matrix,
+            use_container_width=True,
+            height=260
+        )
+
+    if not churn_alerts.empty:
+        st.markdown("#### 🚨 Predictive Churn Alerts (VIP Overdue Orders)")
+        st.caption("Customers who have exceeded their typical purchase cycle intervals.")
+        st.dataframe(
+            churn_alerts[["customer_key", "order_count", "total_spent", "recency_days", "avg_cycle_days", "status"]].rename(
+                columns={
+                    "customer_key": "Customer ID / Phone",
+                    "order_count": "Past Orders",
+                    "total_spent": "Total Spent (৳)",
+                    "recency_days": "Days Since Order",
+                    "avg_cycle_days": "Typical Cycle (Days)",
+                    "status": "Risk Status"
+                }
+            ),
+            use_container_width=True,
+            height=240
+        )
+
     
     return f"{name} ({orders} orders, ৳{value:,.0f})"

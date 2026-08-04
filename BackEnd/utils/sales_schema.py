@@ -89,8 +89,10 @@ def ensure_sales_schema(df: pd.DataFrame) -> pd.DataFrame:
     if out["year"].isna().all() and out["order_date"].notna().any():
         out["year"] = out["order_date"].dt.year.astype("Int64")
 
-    out["customer_key"] = out["email"].where(out["email"] != "", out["phone"])
-    out["customer_key"] = out["customer_key"].fillna("").astype(str).str.strip().str.lower()
+    if "customer_key" not in out.columns or out["customer_key"].isna().all() or (out["customer_key"] == "").all():
+        out["customer_key"] = out["email"].where(out["email"] != "", out["phone"])
+        out["customer_key"] = out["customer_key"].fillna("").astype(str).str.strip().str.lower()
+
 
     out["order_item_key"] = (
         out["order_id"].astype(str).str.strip().str.lower()
