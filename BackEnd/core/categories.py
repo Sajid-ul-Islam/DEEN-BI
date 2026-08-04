@@ -30,8 +30,17 @@ CATEGORIES_PRIORITY = [
     "Trousers", "Trousers - Trousers", "Trousers - Joggers", "Trousers - Cotton Trousers", "Trousers - French Terry Trousers",
     "Boxer", "Leather Bag", "Belt", "Jacket", "Sweater", "Cap", "Mask", "Water Bottle",
     "Co-ords", "Shorts", "Socks", "Footwear", "Perfume & Fragrance", "Accessories", "Gift Box",
-    "Bundles", "Bundles - Combo", "Bundles - Choose Any", "Others"
+    "Bundles", "Bundles - Combo", "Bundles - Choose Any", "Cashback", "Others"
 ]
+
+def is_cashback_item(name: str = "", category: str = "") -> bool:
+    """Returns True if the item name or category represents promotional cashback."""
+    name_str = _normalize(name)
+    cat_str = _normalize(category)
+    if "cashback" in name_str or "cash back" in name_str or "cash-back" in name_str or "cashback" in cat_str:
+        return True
+    return False
+
 
 def format_category_label(cat: str) -> str:
     """Formats a category string for hierarchical display in UI dropdowns."""
@@ -113,6 +122,11 @@ def get_category_for_sales(name) -> str:
     name_str = re.sub(r'([a-z]+)(\d+)', r'\1 \2', name_str)
 
     # 1. HIGH PRIORITY SPECIAL CATEGORIES (Check before 'Shirt' overlap)
+    
+    # Cashback
+    if _has_any(["cashback", "cash back", "cash-back"], name_str):
+        return "Cashback"
+
     
     # Sweatshirt 
     if _has_any(["sweatshirt", "hoodie", "pullover", "sw", "hd"], name_str):

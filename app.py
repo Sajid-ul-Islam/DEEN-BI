@@ -189,6 +189,8 @@ def _render_workspace_sidebar():
             st.session_state.focus_mode = focus_mode
             st.rerun()
 
+        ui.render_theme_selector()
+
         st.divider()
 
         # ── Merged System Heartbeat ──────────────────────────────────────────

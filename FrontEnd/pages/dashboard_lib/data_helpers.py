@@ -62,6 +62,9 @@ def build_order_level_dataset(df: pd.DataFrame) -> pd.DataFrame:
     import numpy as np
     sales_clean["order_id"] = np.where(order_id_clean.isin(["", "nan", "None", "NaN", "<NA>"]), None, order_id_clean)
     
+    from BackEnd.utils.sales_schema import estimate_line_revenue
+    sales_clean["clean_line_rev"] = estimate_line_revenue(sales_clean)
+    
     # Supercharge GroupBy utilizing Polars LazyFrame
     lz_df = pl.from_pandas(sales_clean).lazy()
     
@@ -71,12 +74,13 @@ def build_order_level_dataset(df: pd.DataFrame) -> pd.DataFrame:
     meta_cols = ["shipped_date", "customer_key", "customer_name", "order_status", "source", "city", "state"] + optional_columns
     available_meta = [c for c in meta_cols if c in sales_clean.columns]
     
-    # Perform aggregations on valid orders
+    # Perform aggregations on valid orders (summing line revenues excludes cashback)
     agg_exprs = [
         pl.col("order_date").min().alias("order_date"),
-        pl.col("order_total").max().alias("order_total"),
+        pl.col("clean_line_rev").sum().alias("order_total"),
         pl.col("qty").sum().alias("qty"),
     ]
+
     
     # Pick the first non-null string metadata element
     for col in available_meta:

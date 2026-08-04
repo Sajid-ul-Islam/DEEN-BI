@@ -128,25 +128,35 @@ def estimate_line_revenue(df: pd.DataFrame) -> pd.Series:
     """Estimate line revenue using the best available columns.
     
     Memory-safe implementation with chunked processing for large datasets.
+    Excludes promotional cashback items from revenue calculations.
     """
     sales_df = ensure_sales_schema(df)
     if sales_df is None or sales_df.empty:
         return pd.Series(dtype="float64")
 
+    from BackEnd.core.categories import is_cashback_item
+
     try:
         qty = pd.to_numeric(sales_df.get("qty", 0), errors="coerce").fillna(0)
 
+        # Identify cashback rows
+        cb_mask = sales_df.apply(
+            lambda r: is_cashback_item(r.get("item_name", ""), r.get("Category", "")),
+            axis=1
+        )
+
         for col in ["item_revenue", "Item Revenue", "line_total", "Line Total", "total"]:
             if col in sales_df.columns:
-                values = pd.to_numeric(sales_df[col], errors="coerce")
+                values = pd.to_numeric(sales_df[col], errors="coerce").fillna(0.0)
                 if values.notna().any() and values.sum() > 0:
-                    return values.fillna(0.0)
+                    return values.mask(cb_mask, 0.0)
 
         for col in ["item_cost", "Item Cost", "price", "Price"]:
             if col in sales_df.columns:
                 unit_price = pd.to_numeric(sales_df[col], errors="coerce").fillna(0.0)
                 if unit_price.sum() > 0:
-                    return unit_price * qty
+                    rev = unit_price * qty
+                    return rev.mask(cb_mask, 0.0)
 
         order_total = pd.to_numeric(sales_df.get("order_total", 0), errors="coerce").fillna(0.0)
         
@@ -157,18 +167,15 @@ def estimate_line_revenue(df: pd.DataFrame) -> pd.Series:
                 line_counts = sales_df["order_id"].map(order_line_counts).replace(0, 1)
                 qty_totals = qty.groupby(sales_df["order_id"]).transform("sum").replace(0, 1)
                 gc.collect()
-                return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
-            else:
-                qty_totals = qty.groupby(group_key).transform("sum").replace(0, 1)
-                line_counts = sales_df.groupby(group_key).cumcount() * 0 + 1
-                line_counts = line_counts.groupby(group_key).transform("sum").replace(0, 1)
-                return (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
-        else:
-            line_count = len(sales_df)
-            return order_total / line_count if line_count > 0 else order_total
-            
+                res = (order_total * (qty / qty_totals)).fillna(order_total / line_counts).fillna(order_total)
+                return res.mask(cb_mask, 0.0)
+
+            order_line_counts = sales_df.groupby("order_id")["order_id"].transform("count").replace(0, 1)
+            qty_totals = qty.groupby(sales_df["order_id"]).transform("sum").replace(0, 1)
+            res = (order_total * (qty / qty_totals)).fillna(order_total / order_line_counts).fillna(order_total)
+            return res.mask(cb_mask, 0.0)
+
+        return pd.Series(order_total, index=sales_df.index).mask(cb_mask, 0.0)
     except Exception as e:
         logger.error(f"Error estimating line revenue: {e}")
-        order_total = pd.to_numeric(sales_df.get("order_total", 0), errors="coerce").fillna(0.0)
-        line_count = len(sales_df)
-        return order_total / line_count if line_count > 0 else order_total
+        return pd.Series(0.0, index=sales_df.index)

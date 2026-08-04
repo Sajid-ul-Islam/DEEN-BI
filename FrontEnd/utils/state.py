@@ -69,6 +69,7 @@ def save_state():
         "inv_active_l",
         "inv_t_col",
         "low_stock_threshold",
+        "theme_choice",
     ]
 
     for key in keys_to_persist:
@@ -119,6 +120,8 @@ def init_state():
     """Initialize defaults if not present."""
     if "low_stock_threshold" not in st.session_state:
         st.session_state.low_stock_threshold = 5
+    if "theme_choice" not in st.session_state:
+        st.session_state.theme_choice = "Indigo Modern"
     load_state()
 
 

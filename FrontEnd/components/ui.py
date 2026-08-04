@@ -2,7 +2,7 @@
 Use `from FrontEnd.components import ui` and access components like `ui.hero(...)`.
 """
 
-from .layout import setup_theme, sidebar_branding, page_header, page_footer
+from .layout import setup_theme, render_theme_selector, THEMES, sidebar_branding, page_header, page_footer
 from .cards import card, hero, commentary, info_box
 from .metrics import metric_highlight, icon_metric, badge, date_context, operational_card, skeleton_metric, skeleton_row
 from .charts import build_discrete_color_map, apply_plotly_theme, donut_chart, bar_chart
@@ -11,6 +11,8 @@ from .interactive import floating_action_bar, dialog_confirm
 
 __all__ = [
     "setup_theme",
+    "render_theme_selector",
+    "THEMES",
     "sidebar_branding",
     "page_header",
     "card",

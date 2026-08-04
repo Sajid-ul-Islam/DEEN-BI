@@ -1,6 +1,6 @@
-
 from __future__ import annotations
 
+from typing import Any
 import pandas as pd
 try:
     import plotly.express as px
@@ -12,36 +12,38 @@ except ImportError:
     HAS_PLOTLY = False
 
 
+def get_active_theme_palette() -> dict[str, Any]:
+    """Retrieves active theme dictionary and color properties for Plotly charts."""
+    try:
+        import streamlit as st
+        from FrontEnd.components.layout import THEMES
+        theme_key = st.session_state.get("theme_choice", "Indigo Modern")
+        return THEMES.get(theme_key, THEMES["Indigo Modern"])
+    except Exception:
+        return {
+            "name": "Indigo Modern",
+            "primary": "#6366F1",
+            "secondary": "#3B82F6",
+            "accent": "#818CF8",
+            "chart_scale": "Plasma",
+            "chart_colors": ["#6366F1", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"],
+        }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def build_discrete_color_map(labels: list[str], scale_name: str = "Plasma") -> dict[str, str]:
+def build_discrete_color_map(labels: list[str], scale_name: str | None = None) -> dict[str, str]:
     if not HAS_PLOTLY:
         return {}
     cleaned = [str(label) for label in labels if str(label).strip()]
     if not cleaned:
         return {}
 
+    theme = get_active_theme_palette()
+    scale = scale_name or theme.get("chart_scale", "Plasma")
+
     color_map: dict[str, str] = {}
     for index, label in enumerate(cleaned):
         value = (index / max(1, len(cleaned) - 1)) * 0.85 if len(cleaned) > 1 else 0.0
-        color_map[label] = px.colors.sample_colorscale(scale_name, [value])[0]
+        color_map[label] = px.colors.sample_colorscale(scale, [value])[0]
     return color_map
 
 
@@ -54,6 +56,11 @@ def apply_plotly_theme(
 ):
     if not HAS_PLOTLY or fig is None:
         return None
+
+    theme = get_active_theme_palette()
+    chart_colors = theme.get("chart_colors", ["#6366F1", "#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6"])
+    primary_color = theme.get("primary", "#6366F1")
+
     chart_margin = margin or dict(l=12, r=12, t=56, b=12)
     fig.update_layout(
         height=height,
@@ -63,10 +70,11 @@ def apply_plotly_theme(
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, sans-serif"),
         title=dict(font=dict(size=16)),
+        colorway=chart_colors,
         hoverlabel=dict(
             bgcolor="rgba(15, 23, 42, 0.95)",
             font=dict(family="Inter, sans-serif", color="white", size=12),
-            bordercolor="rgba(255, 255, 255, 0.1)",
+            bordercolor=primary_color,
             namelength=-1,
         ),
         legend=dict(
@@ -86,15 +94,18 @@ def donut_chart(
     values: str,
     names: str,
     title: str,
-    color_scale: str = "Plasma",
+    color_scale: str | None = None,
 ):
     if not HAS_PLOTLY:
         return None
     if df is None or df.empty or values not in df.columns or names not in df.columns:
         return go.Figure()
 
+    theme = get_active_theme_palette()
+    scale = color_scale or theme.get("chart_scale", "Plasma")
+
     labels = df[names].astype(str).tolist()
-    color_map = build_discrete_color_map(labels, scale_name=color_scale)
+    color_map = build_discrete_color_map(labels, scale_name=scale)
     fig = px.pie(
         df,
         values=values,
@@ -143,7 +154,7 @@ def bar_chart(
     y: str,
     title: str,
     color: str | None = None,
-    color_scale: str = "Tealgrn",
+    color_scale: str | None = None,
     orientation: str = "h",
     text_auto: str | bool | None = None,
 ):
@@ -151,6 +162,9 @@ def bar_chart(
         return None
     if df is None or df.empty or x not in df.columns or y not in df.columns:
         return go.Figure()
+
+    theme = get_active_theme_palette()
+    scale = color_scale or theme.get("chart_scale", "Viridis")
 
     chart_color = color or x
     fig = px.bar(
@@ -161,7 +175,7 @@ def bar_chart(
         orientation=orientation,
         title=title,
         text_auto=text_auto if text_auto is not None else False,
-        color_continuous_scale=color_scale if chart_color in df.columns else None,
+        color_continuous_scale=scale if chart_color in df.columns else None,
     )
     if orientation == "h":
         fig.update_layout(yaxis_title="", xaxis_title="")
