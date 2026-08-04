@@ -466,7 +466,11 @@ def _inject_meta_pixel():
     hardcoded in source. Set it in Streamlit Cloud > App Settings > Secrets,
     or in a local .env file as: META_PIXEL_ID=123456789012345
     """
-    pixel_id = os.environ.get("META_PIXEL_ID", "")
+    # st.secrets (secrets.toml / Streamlit Cloud) takes priority; os.environ is the local fallback
+    try:
+        pixel_id = st.secrets.get("META_PIXEL_ID", "") or os.environ.get("META_PIXEL_ID", "")
+    except Exception:
+        pixel_id = os.environ.get("META_PIXEL_ID", "")
     if not pixel_id:
         return  # Skip silently if not configured
 
