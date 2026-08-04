@@ -6,11 +6,53 @@ import hashlib
 import streamlit as st
 from typing import List, Dict, Any
 from pathlib import Path
-from langchain_community.vectorstores import FAISS
-from langchain_core.documents import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import DirectoryLoader, CSVLoader
+try:
+    from langchain_core.documents import Document
+except ImportError:
+    class Document:
+        def __init__(self, page_content: str, metadata: dict = None):
+            self.page_content = page_content
+            self.metadata = metadata or {}
+
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ImportError:
+    try:
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+    except ImportError:
+        class RecursiveCharacterTextSplitter:
+            def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
+                self.chunk_size = chunk_size
+                self.chunk_overlap = chunk_overlap
+
+            def split_documents(self, documents: List[Any]) -> List[Any]:
+                split_docs = []
+                for doc in documents:
+                    text = getattr(doc, "page_content", str(doc))
+                    meta = getattr(doc, "metadata", {})
+                    if len(text) <= self.chunk_size:
+                        split_docs.append(doc)
+                    else:
+                        start = 0
+                        while start < len(text):
+                            end = start + self.chunk_size
+                            chunk_text = text[start:end]
+                            split_docs.append(Document(page_content=chunk_text, metadata=meta))
+                            start += (self.chunk_size - self.chunk_overlap)
+                return split_docs
+
+try:
+    from langchain_community.vectorstores import FAISS
+except ImportError:
+    FAISS = None
+
+try:
+    from langchain_community.document_loaders import DirectoryLoader, CSVLoader
+except ImportError:
+    DirectoryLoader, CSVLoader = None, None
+
 from BackEnd.core.logging_config import get_logger
+
 
 logger = get_logger("rag_engine")
 
