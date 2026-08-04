@@ -459,9 +459,44 @@ def _render_global_chat():
         else:
             st.info("Load dashboard data first, then return here to chat with the Pilot.")
 
+def _inject_meta_pixel():
+    """Injects Meta Pixel base code via HTML injection.
+    
+    Reads META_PIXEL_ID from environment variables so the ID is never
+    hardcoded in source. Set it in Streamlit Cloud > App Settings > Secrets,
+    or in a local .env file as: META_PIXEL_ID=123456789012345
+    """
+    pixel_id = os.environ.get("META_PIXEL_ID", "")
+    if not pixel_id:
+        return  # Skip silently if not configured
+
+    st.markdown(
+        f"""
+        <script>
+        !function(f,b,e,v,n,t,s)
+        {{if(f.fbq)return;n=f.fbq=function(){{n.callMethod?
+        n.callMethod.apply(n,arguments):n.queue.push(arguments)}};
+        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+        n.queue=[];t=b.createElement(e);t.async=!0;
+        t.src=v;s=b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t,s)}}(window, document,'script',
+        'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '{pixel_id}');
+        fbq('track', 'PageView');
+        </script>
+        <noscript>
+          <img height="1" width="1" style="display:none"
+               src="https://www.facebook.com/tr?id={pixel_id}&ev=PageView&noscript=1"/>
+        </noscript>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def run_app():
     init_state()
     ui.setup_theme()
+    _inject_meta_pixel()
     render_dependency_alerts()
     pg = _render_workspace_sidebar()
     pg.run()
