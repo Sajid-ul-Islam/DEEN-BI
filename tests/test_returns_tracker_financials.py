@@ -103,8 +103,8 @@ class TestReturnsTrackerFinancials(unittest.TestCase):
         daily = metrics["daily_financials"].copy()
 
         self.assertEqual(len(daily), 3)
-        self.assertEqual(float(daily.loc[daily["date"] == pd.to_datetime("2026-04-09").date(), "total_loss"].iloc[0]), 900.0)
-        self.assertEqual(float(daily.loc[daily["date"] == pd.to_datetime("2026-04-08").date(), "gross_sales"].iloc[0]), 900.0)
+        self.assertEqual(float(daily.loc[pd.to_datetime(daily["date"]).dt.date == pd.to_datetime("2026-04-09").date(), "total_loss"].iloc[0]), 900.0)
+        self.assertEqual(float(daily.loc[pd.to_datetime(daily["date"]).dt.date == pd.to_datetime("2026-04-08").date(), "gross_sales"].iloc[0]), 900.0)
 
 
 if __name__ == "__main__":

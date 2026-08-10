@@ -1195,7 +1195,10 @@ def _build_daily_financials(returns_df: pd.DataFrame, sales_df: Optional[pd.Data
         # 1. Process Sales (Minimal footprint with LazyFrames)
         if sales_df is not None and not sales_df.empty and "order_date" in sales_df.columns:
             sales_cols = [c for c in ["order_date", "_line_revenue"] if c in sales_df.columns]
-            lz_sales = pl.from_pandas(sales_df[sales_cols].dropna(subset=["order_date"])).lazy()
+            s_clean = sales_df[sales_cols].copy()
+            s_clean["order_date"] = pd.to_datetime(s_clean["order_date"], errors="coerce")
+            s_clean = s_clean.dropna(subset=["order_date"])
+            lz_sales = pl.from_pandas(s_clean).lazy()
             lz_sales = lz_sales.with_columns(pl.col("order_date").dt.date().alias("date"))
             
             if "_line_revenue" in sales_cols:
@@ -1211,7 +1214,10 @@ def _build_daily_financials(returns_df: pd.DataFrame, sales_df: Optional[pd.Data
             if "_resolved_revenue_impact" in returns_df.columns:
                 ret_cols.append("_resolved_revenue_impact")
                 
-            lz_returns = pl.from_pandas(returns_df[ret_cols].dropna(subset=["date"])).lazy()
+            r_clean = returns_df[ret_cols].copy()
+            r_clean["date"] = pd.to_datetime(r_clean["date"], errors="coerce")
+            r_clean = r_clean.dropna(subset=["date"])
+            lz_returns = pl.from_pandas(r_clean).lazy()
             lz_returns = lz_returns.with_columns(pl.col("date").dt.date())
             
             if "_resolved_revenue_impact" not in ret_cols:

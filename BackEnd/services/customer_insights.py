@@ -187,6 +187,10 @@ def _aggregate_customer_metrics(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
         
+    df = df.copy()
+    if "order_date" in df.columns:
+        df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+
     lz_df = pl.from_pandas(df).lazy()  # type: ignore
     
     lz_df = lz_df.with_columns([
@@ -199,7 +203,7 @@ def _aggregate_customer_metrics(df: pd.DataFrame) -> pd.DataFrame:
     
     agg_exprs = [
         pl.col("normalized_name")
-          .filter(~pl.col("normalized_name").str.to_lowercase().str.strip().is_in(invalid_names))
+          .filter(~pl.col("normalized_name").str.to_lowercase().str.strip_chars().is_in(invalid_names))
           .first().fill_null("Unknown").alias("primary_name"),
         pl.col("clean_email").filter(pl.col("clean_email") != "").unique().sort().str.join(", ").alias("all_emails"),
         pl.col("clean_phone").filter(pl.col("clean_phone") != "").unique().sort().str.join(", ").alias("all_phones"),
