@@ -227,3 +227,223 @@ def fetch_ga4_aarrr_funnel_metrics(start_date: str = "30daysAgo", end_date: str 
         logger.error(f"Error fetching GA4 AARRR funnel metrics: {exc}")
         return {}
 
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ga4_user_engagement_metrics(start_date: str = "30daysAgo", end_date: str = "today") -> dict:
+    """Fetch global property user engagement metrics: engagementRate, bounceRate, averageSessionDuration, screenPageViews, eventCount."""
+    credentials, property_id = _get_ga4_credentials_and_property()
+    if not credentials or not property_id:
+        return {}
+
+    try:
+        client = BetaAnalyticsDataClient(credentials=credentials)
+
+        request = RunReportRequest(
+            property=property_id,
+            metrics=[
+                Metric(name="engagementRate"),
+                Metric(name="bounceRate"),
+                Metric(name="averageSessionDuration"),
+                Metric(name="screenPageViews"),
+                Metric(name="eventCount"),
+            ],
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
+        )
+
+        response = client.run_report(request)
+        if not response.rows:
+            return {}
+
+        row = response.rows[0]
+        return {
+            "engagement_rate": float(row.metric_values[0].value or 0.0) * 100.0,
+            "bounce_rate": float(row.metric_values[1].value or 0.0) * 100.0,
+            "avg_session_duration": float(row.metric_values[2].value or 0.0),
+            "page_views": int(row.metric_values[3].value or 0),
+            "event_count": int(row.metric_values[4].value or 0),
+        }
+    except Exception as exc:
+        logger.error(f"Error fetching GA4 engagement metrics: {exc}")
+        return {}
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ga4_landing_pages(start_date: str = "30daysAgo", end_date: str = "today") -> pd.DataFrame:
+    """Fetch landing page performance metrics from GA4."""
+    credentials, property_id = _get_ga4_credentials_and_property()
+    if not credentials or not property_id:
+        return pd.DataFrame()
+
+    try:
+        client = BetaAnalyticsDataClient(credentials=credentials)
+
+        request = RunReportRequest(
+            property=property_id,
+            dimensions=[
+                Dimension(name="landingPage"),
+            ],
+            metrics=[
+                Metric(name="sessions"),
+                Metric(name="activeUsers"),
+                Metric(name="engagementRate"),
+                Metric(name="conversions"),
+                Metric(name="totalRevenue"),
+            ],
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
+            limit=25,
+        )
+
+        response = client.run_report(request)
+        rows = []
+        for row in response.rows:
+            rows.append({
+                "landing_page": row.dimension_values[0].value,
+                "sessions": int(row.metric_values[0].value or 0),
+                "active_users": int(row.metric_values[1].value or 0),
+                "engagement_rate": float(row.metric_values[2].value or 0.0) * 100.0,
+                "conversions": int(row.metric_values[3].value or 0),
+                "revenue": float(row.metric_values[4].value or 0.0),
+            })
+
+        df = pd.DataFrame(rows)
+        return df.sort_values("sessions", ascending=False).reset_index(drop=True)
+    except Exception as exc:
+        logger.error(f"Error fetching GA4 landing pages: {exc}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ga4_geo_metrics(start_date: str = "30daysAgo", end_date: str = "today") -> pd.DataFrame:
+    """Fetch geographic location breakdown (city and country) from GA4."""
+    credentials, property_id = _get_ga4_credentials_and_property()
+    if not credentials or not property_id:
+        return pd.DataFrame()
+
+    try:
+        client = BetaAnalyticsDataClient(credentials=credentials)
+
+        request = RunReportRequest(
+            property=property_id,
+            dimensions=[
+                Dimension(name="country"),
+                Dimension(name="city"),
+            ],
+            metrics=[
+                Metric(name="activeUsers"),
+                Metric(name="sessions"),
+                Metric(name="conversions"),
+                Metric(name="totalRevenue"),
+            ],
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
+            limit=30,
+        )
+
+        response = client.run_report(request)
+        rows = []
+        for row in response.rows:
+            city_val = row.dimension_values[1].value
+            if city_val in ("(not set)", "not set", ""):
+                city_val = "Unknown / Direct"
+            rows.append({
+                "country": row.dimension_values[0].value,
+                "city": city_val,
+                "active_users": int(row.metric_values[0].value or 0),
+                "sessions": int(row.metric_values[1].value or 0),
+                "conversions": int(row.metric_values[2].value or 0),
+                "revenue": float(row.metric_values[3].value or 0.0),
+            })
+
+        df = pd.DataFrame(rows)
+        return df.sort_values("sessions", ascending=False).reset_index(drop=True)
+    except Exception as exc:
+        logger.error(f"Error fetching GA4 geo metrics: {exc}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ga4_campaign_performance(start_date: str = "30daysAgo", end_date: str = "today") -> pd.DataFrame:
+    """Fetch marketing campaign performance breakdown from GA4."""
+    credentials, property_id = _get_ga4_credentials_and_property()
+    if not credentials or not property_id:
+        return pd.DataFrame()
+
+    try:
+        client = BetaAnalyticsDataClient(credentials=credentials)
+
+        request = RunReportRequest(
+            property=property_id,
+            dimensions=[
+                Dimension(name="sessionCampaignName"),
+                Dimension(name="sessionSourceMedium"),
+            ],
+            metrics=[
+                Metric(name="sessions"),
+                Metric(name="conversions"),
+                Metric(name="totalRevenue"),
+                Metric(name="engagementRate"),
+            ],
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
+            limit=25,
+        )
+
+        response = client.run_report(request)
+        rows = []
+        for row in response.rows:
+            camp = row.dimension_values[0].value
+            if camp in ("(not set)", "(direct)", "(referral)", ""):
+                camp = "Unassigned / Direct"
+            rows.append({
+                "campaign": camp,
+                "source_medium": row.dimension_values[1].value,
+                "sessions": int(row.metric_values[0].value or 0),
+                "conversions": int(row.metric_values[1].value or 0),
+                "revenue": float(row.metric_values[2].value or 0.0),
+                "engagement_rate": float(row.metric_values[3].value or 0.0) * 100.0,
+            })
+
+        df = pd.DataFrame(rows)
+        return df.sort_values("sessions", ascending=False).reset_index(drop=True)
+    except Exception as exc:
+        logger.error(f"Error fetching GA4 campaign performance: {exc}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_ga4_ecommerce_events(start_date: str = "30daysAgo", end_date: str = "today") -> pd.DataFrame:
+    """Fetch GA4 e-commerce funnel events: view_item, add_to_cart, begin_checkout, purchase."""
+    credentials, property_id = _get_ga4_credentials_and_property()
+    if not credentials or not property_id:
+        return pd.DataFrame()
+
+    try:
+        client = BetaAnalyticsDataClient(credentials=credentials)
+
+        request = RunReportRequest(
+            property=property_id,
+            dimensions=[
+                Dimension(name="eventName"),
+            ],
+            metrics=[
+                Metric(name="eventCount"),
+            ],
+            date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
+        )
+
+        response = client.run_report(request)
+        rows = []
+        target_events = {"view_item", "add_to_cart", "begin_checkout", "purchase"}
+        for row in response.rows:
+            ename = row.dimension_values[0].value
+            if ename in target_events:
+                rows.append({
+                    "event_name": ename,
+                    "event_count": int(row.metric_values[0].value or 0),
+                })
+
+        df = pd.DataFrame(rows)
+        return df
+    except Exception as exc:
+        logger.error(f"Error fetching GA4 e-commerce events: {exc}")
+        return pd.DataFrame()
+
+

@@ -4,6 +4,11 @@ from BackEnd.services.ga4_service import (
     is_ga4_configured,
     fetch_ga4_acquisition_metrics,
     fetch_ga4_channel_breakdown,
+    fetch_ga4_user_engagement_metrics,
+    fetch_ga4_landing_pages,
+    fetch_ga4_geo_metrics,
+    fetch_ga4_campaign_performance,
+    fetch_ga4_ecommerce_events,
 )
 
 
@@ -19,6 +24,26 @@ class TestGA4Service(unittest.TestCase):
 
     def test_fetch_ga4_channel_breakdown_returns_dataframe(self):
         df = fetch_ga4_channel_breakdown()
+        self.assertIsInstance(df, pd.DataFrame)
+
+    def test_fetch_ga4_user_engagement_metrics_returns_dict(self):
+        res = fetch_ga4_user_engagement_metrics()
+        self.assertIsInstance(res, dict)
+
+    def test_fetch_ga4_landing_pages_returns_dataframe(self):
+        df = fetch_ga4_landing_pages()
+        self.assertIsInstance(df, pd.DataFrame)
+
+    def test_fetch_ga4_geo_metrics_returns_dataframe(self):
+        df = fetch_ga4_geo_metrics()
+        self.assertIsInstance(df, pd.DataFrame)
+
+    def test_fetch_ga4_campaign_performance_returns_dataframe(self):
+        df = fetch_ga4_campaign_performance()
+        self.assertIsInstance(df, pd.DataFrame)
+
+    def test_fetch_ga4_ecommerce_events_returns_dataframe(self):
+        df = fetch_ga4_ecommerce_events()
         self.assertIsInstance(df, pd.DataFrame)
 
 
