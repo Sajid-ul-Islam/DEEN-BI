@@ -21,6 +21,54 @@ from FrontEnd.pages.dashboard_lib.data_helpers import build_order_level_dataset,
 from FrontEnd.utils.key_manager import KeyManager
 
 
+def _get_standard_indicator(metric_type: str, value: float) -> tuple[str, str, str]:
+    """
+    Evaluates metric against industry benchmark standards.
+    Returns (status_text, status_badge_html, status_level)
+    """
+    if metric_type == "acquisition_sessions":
+        if value >= 5000:
+            return "🟢 Above Standard", '<span style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟢 Above Standard (≥5k)</span>', "above"
+        elif value >= 3000:
+            return "🟡 On Target", '<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟡 On Target (≥3k)</span>', "target"
+        else:
+            return "🔴 Below Standard", '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🔴 Below Standard (<3k)</span>', "below"
+
+    elif metric_type == "activation_rate":
+        if value >= 55.0:
+            return "🟢 Above Standard", '<span style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟢 Above Standard (≥55%)</span>', "above"
+        elif value >= 45.0:
+            return "🟡 On Target", '<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟡 On Target (≥45%)</span>', "target"
+        else:
+            return "🔴 Below Standard", '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🔴 Below Standard (<45%)</span>', "below"
+
+    elif metric_type == "retention_rate":
+        if value >= 30.0:
+            return "🟢 Above Standard", '<span style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟢 Above Standard (≥30%)</span>', "above"
+        elif value >= 20.0:
+            return "🟡 On Target", '<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟡 On Target (≥20%)</span>', "target"
+        else:
+            return "🔴 Below Standard", '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🔴 Below Standard (<20%)</span>', "below"
+
+    elif metric_type == "revenue_cvr":
+        if value >= 2.50:
+            return "🟢 Above Standard", '<span style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟢 Above Standard (≥2.5%)</span>', "above"
+        elif value >= 1.80:
+            return "🟡 On Target", '<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟡 On Target (≥1.8%)</span>', "target"
+        else:
+            return "🔴 Below Standard", '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🔴 Below Standard (<1.8%)</span>', "below"
+
+    elif metric_type == "referral_share":
+        if value >= 35.0:
+            return "🟢 Above Standard", '<span style="background: rgba(16, 185, 129, 0.2); color: #10b981; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟢 Above Standard (≥35%)</span>', "above"
+        elif value >= 25.0:
+            return "🟡 On Target", '<span style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🟡 On Target (≥25%)</span>', "target"
+        else:
+            return "🔴 Below Standard", '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 700; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;">🔴 Below Standard (<25%)</span>', "below"
+
+    return "⚪ Standard", "", "target"
+
+
 def _render_flags_matrix(
     total_sessions: int,
     active_users: int,
@@ -401,19 +449,25 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
         k1, k2, k3, k4, k5 = st.columns(5)
         with k1:
             ui.icon_metric("A - Acquisition", f"{total_sessions:,}", icon="📡")
-            ui.badge("Total Sessions")
+            _, badge_html, _ = _get_standard_indicator("acquisition_sessions", total_sessions)
+            st.markdown(f'<div style="margin-top: 4px;">{badge_html}</div>', unsafe_allow_html=True)
         with k2:
             ui.icon_metric("A - Activation", f"{engaged_sessions:,}", icon="⚡", delta=f"{activation_rate:.1f}% rate")
-            ui.badge("Engaged Visitors")
+            _, badge_html, _ = _get_standard_indicator("activation_rate", activation_rate)
+            st.markdown(f'<div style="margin-top: 4px;">{badge_html}</div>', unsafe_allow_html=True)
         with k3:
             ui.icon_metric("R - Retention", f"{returning_users:,}", icon="🔄", delta=f"{retention_rate:.1f}% return")
-            ui.badge("Returning Users")
+            _, badge_html, _ = _get_standard_indicator("retention_rate", retention_rate)
+            st.markdown(f'<div style="margin-top: 4px;">{badge_html}</div>', unsafe_allow_html=True)
         with k4:
-            ui.icon_metric("R - Revenue", f"TK {total_revenue:,.0f}", icon="💰", delta=f"{total_conversions:,} orders")
-            ui.badge("Settled Sales")
+            ui.icon_metric("R - Revenue", f"TK {total_revenue:,.0f}", icon="💰", delta=f"{(total_orders if total_orders > 0 else total_conversions):,} orders ({overall_cvr:.2f}% CVR)")
+            _, badge_html, _ = _get_standard_indicator("revenue_cvr", overall_cvr)
+            st.markdown(f'<div style="margin-top: 4px;">{badge_html}</div>', unsafe_allow_html=True)
         with k5:
-            ui.icon_metric("R - Referral", f"{referral_sessions:,}", icon="📢", delta=f"{(referral_sessions/total_sessions*100):.1f}% share" if total_sessions else None)
-            ui.badge("Organic & Direct")
+            ref_share = (referral_sessions / total_sessions * 100) if total_sessions else 0.0
+            ui.icon_metric("R - Referral", f"{referral_sessions:,}", icon="📢", delta=f"{ref_share:.1f}% share")
+            _, badge_html, _ = _get_standard_indicator("referral_share", ref_share)
+            st.markdown(f'<div style="margin-top: 4px;">{badge_html}</div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -431,7 +485,7 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
                 total_sessions,
                 engaged_sessions,
                 returning_users,
-                total_conversions,
+                total_orders if total_orders > 0 else total_conversions,
                 referral_sessions
             ]
             fig_funnel = go.Figure(go.Funnel(
