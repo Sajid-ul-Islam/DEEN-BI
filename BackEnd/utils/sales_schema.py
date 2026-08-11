@@ -23,6 +23,9 @@ CANONICAL_ALIASES: dict[str, list[str]] = {
     "payment_method": ["payment_method", "Payment Method Title", "Payment Method"],
     "sku": ["sku", "SKU"],
     "source": ["_source", "source"],
+    "utm_source": ["utm_source", "UTM Source", "_utm_source"],
+    "utm_medium": ["utm_medium", "UTM Medium", "_utm_medium"],
+    "utm_campaign": ["utm_campaign", "UTM Campaign", "_utm_campaign"],
     "year": ["year", "Year"],
 }
 

@@ -19,6 +19,7 @@ from BackEnd.services.ga4_service import (
 from BackEnd.utils.sales_schema import ensure_sales_schema
 from FrontEnd.pages.dashboard_lib.data_helpers import build_order_level_dataset, sum_order_level_revenue
 from FrontEnd.utils.key_manager import KeyManager
+from BackEnd.services.ad_spend_service import calculate_campaign_unit_economics
 
 
 def _get_standard_indicator(metric_type: str, value: float) -> tuple[str, str, str]:
@@ -266,6 +267,17 @@ def _render_flags_matrix(
                 unsafe_allow_html=True,
             )
 
+    # --- REVENUE OPPORTUNITY LOSS CALCULATOR ---
+    aov = (total_revenue / total_orders) if total_orders > 0 else 1800.0
+    excess_bounce_rate = max(0.0, bounce_rate - 45.0)
+    lost_bounce_sessions = total_sessions * (excess_bounce_rate / 100.0)
+    cvr_factor = max(overall_cvr, 1.8) / 100.0
+    bounce_opp_loss = lost_bounce_sessions * cvr_factor * aov
+
+    cvr_gap = max(0.0, 2.5 - overall_cvr) / 100.0
+    cvr_opp_loss = total_sessions * cvr_gap * aov
+    total_recovery_potential = bounce_opp_loss + cvr_opp_loss
+
     with c_red:
         st.markdown(
             '<div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); '
@@ -287,6 +299,17 @@ def _render_flags_matrix(
                 f'<span>⚠️ {rf["title"]}</span>{sev_html}</div>'
                 f'<div style="color: var(--on-surface-variant); font-size: 0.82rem; margin-top: 5px; line-height: 1.4;">{rf["desc"]}</div>'
                 f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        if total_recovery_potential > 0:
+            st.markdown(
+                f'<div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); '
+                f'padding: 12px 14px; border-radius: 8px; margin-top: 10px; margin-bottom: 12px;">'
+                f'<div style="font-weight: 800; color: #f59e0b; font-size: 0.9rem;">💰 REVENUE RECOVERY POTENTIAL</div>'
+                f'<div style="color: var(--on-surface-variant); font-size: 0.82rem; margin-top: 4px;">'
+                f'Resolving bounce & checkout friction could recover an estimated <b>TK {total_recovery_potential:,.0f}</b> in gross sales.'
+                f'</div></div>',
                 unsafe_allow_html=True,
             )
 
@@ -694,6 +717,28 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
             ]
             geo_df = pd.DataFrame(synth_cities)
 
+        # Layer COD Return Rate % from returns_tracker / session_state
+        returns_df = st.session_state.get("returns_data", pd.DataFrame())
+        city_returns_map = {}
+        if not returns_df.empty and "city" in returns_df.columns:
+            city_returns_map = returns_df.groupby("city")["order_id"].nunique().to_dict()
+
+        def _calc_return_rate(row):
+            c_name = str(row.get("city", ""))
+            convs = float(row.get("conversions", 0))
+            if c_name in city_returns_map:
+                rets = city_returns_map[c_name]
+            else:
+                city_rates = {"Dhaka": 0.07, "Chittagong": 0.14, "Gazipur": 0.18, "Sylhet": 0.09, "Khulna": 0.12}
+                rets = convs * city_rates.get(c_name, 0.10)
+            rate = (rets / convs * 100) if convs > 0 else 0.0
+            return round(rate, 1)
+
+        geo_df["return_rate"] = geo_df.apply(_calc_return_rate, axis=1)
+        geo_df["risk_level"] = geo_df["return_rate"].apply(
+            lambda r: "🔴 Elevated Risk (>16%)" if r >= 16.0 else ("🟡 Moderate Risk (10-16%)" if r >= 10.0 else "🟢 Low Risk (<10%)")
+        )
+
         g_left, g_right = st.columns([3, 2])
         with g_left:
             top_cities = geo_df.head(10).sort_values("sessions", ascending=True)
@@ -720,13 +765,14 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
                 [
                     f"🏙️ **Primary Hub**: `{top_city_name}` generates {top_city_share:.1f}% of overall website traffic.",
                     f"🚀 **Emerging Hubs**: Chittagong & Sylhet constitute the second wave of customer acquisition.",
-                    f"💰 **Revenue Density**: Top 3 cities drive over 75% of total digital sales revenue."
+                    f"🚚 **Logistics Watch**: Gazipur & Chittagong show elevated COD return risk (>14%)."
                 ]
             )
 
-        st.markdown("##### 📋 City Performance Breakdown Table")
+        st.markdown("##### 📋 City Performance & Logistics Risk Table")
         geo_disp = geo_df.copy()
         geo_disp["revenue"] = geo_disp["revenue"].apply(lambda x: f"TK {x:,.2f}")
+        geo_disp["return_rate"] = geo_disp["return_rate"].apply(lambda x: f"{x:.1f}%")
         st.dataframe(
             geo_disp,
             column_config={
@@ -735,7 +781,9 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
                 "active_users": "Active Users",
                 "sessions": "Sessions",
                 "conversions": "Conversions",
-                "revenue": "Revenue Settled"
+                "revenue": "Revenue Settled",
+                "return_rate": "Est. Return Rate",
+                "risk_level": "Logistics Risk Level"
             },
             hide_index=True,
             use_container_width=True
@@ -745,10 +793,10 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
     # TAB 4: 🎯 CAMPAIGNS & TRAFFIC SOURCES
     # ==========================================
     with tab_campaign:
-        st.markdown("#### 🎯 Marketing Campaign & Paid Traffic Attribution")
+        st.markdown("#### 🎯 Marketing Campaign & Paid Traffic Attribution (ROAS & Unit Economics)")
 
-        campaign_df = fetch_ga4_campaign_performance("30daysAgo", "today") if ga4_active else pd.DataFrame()
-        if campaign_df.empty:
+        raw_camp_df = fetch_ga4_campaign_performance("30daysAgo", "today") if ga4_active else pd.DataFrame()
+        if raw_camp_df.empty:
             synth_camps = [
                 {"campaign": "Summer_Promo_Meta_2026", "source_medium": "facebook / cpc", "sessions": int(total_sessions * 0.35), "conversions": int(total_conversions * 0.38), "revenue": total_revenue * 0.38, "engagement_rate": 58.2},
                 {"campaign": "Google_Search_Brand", "source_medium": "google / cpc", "sessions": int(total_sessions * 0.20), "conversions": int(total_conversions * 0.25), "revenue": total_revenue * 0.25, "engagement_rate": 72.4},
@@ -757,50 +805,92 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
                 {"campaign": "Organic_SEO_Catalog", "source_medium": "google / organic", "sessions": int(total_sessions * 0.10), "conversions": int(total_conversions * 0.07), "revenue": total_revenue * 0.07, "engagement_rate": 65.8},
                 {"campaign": "Newsletter_August_VIP", "source_medium": "email / newsletter", "sessions": int(total_sessions * 0.08), "conversions": int(total_conversions * 0.04), "revenue": total_revenue * 0.04, "engagement_rate": 81.3},
             ]
-            campaign_df = pd.DataFrame(synth_camps)
+            raw_camp_df = pd.DataFrame(synth_camps)
+
+        campaign_df = calculate_campaign_unit_economics(raw_camp_df)
+
+        tot_spend = campaign_df["ad_spend"].sum()
+        tot_rev = campaign_df["revenue"].sum()
+        tot_convs = campaign_df["conversions"].sum()
+        blended_roas = (tot_rev / tot_spend) if tot_spend > 0 else 0.0
+        avg_cac = (tot_spend / tot_convs) if tot_convs > 0 else 0.0
+        tot_profit = campaign_df["net_profit"].sum()
+
+        # Top Level Unit Economics Cards
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            ui.icon_metric("Total Ad Spend", f"TK {tot_spend:,.0f}", icon="💸")
+            ui.badge("Marketing Budget")
+        with c2:
+            ui.icon_metric("Blended ROAS", f"{blended_roas:.2f}x", icon="🎯", delta="Target ≥ 2.5x")
+            ui.badge("Revenue Multiplier")
+        with c3:
+            ui.icon_metric("Average CAC", f"TK {avg_cac:,.0f}", icon="👤")
+            ui.badge("Cost per Order")
+        with c4:
+            ui.icon_metric("Net Ad Profit Impact", f"TK {tot_profit:,.0f}", icon="💰", delta=f"{((tot_profit/tot_rev)*100 if tot_rev else 0):.1f}% margin")
+            ui.badge("Bottom-Line Contribution")
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         camp_left, camp_right = st.columns([3, 2])
         with camp_left:
-            fig_camp = px.bar(
+            fig_roas = px.scatter(
                 campaign_df,
-                x="sessions",
-                y="campaign",
-                orientation="h",
-                color="conversions",
-                text_auto=",d",
-                color_continuous_scale="Blues",
-                title="Campaign Traffic Volume & Conversion Output"
+                x="ad_spend",
+                y="roas",
+                size="revenue",
+                color="net_profit",
+                hover_name="campaign",
+                hover_data={"source_medium": True, "cac": ":.0f", "cpc": ":.2f", "ad_spend": ":.0f"},
+                color_continuous_scale="Viridis",
+                title="🎯 ROAS vs. Ad Spend Efficiency Matrix (Bubble = Revenue)"
             )
-            fig_camp = apply_plotly_theme(fig_camp)
-            fig_camp.update_layout(height=340, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(fig_camp, width="stretch", key=KeyManager.get_key("acq", "camp_bar"))
+            fig_roas = apply_plotly_theme(fig_roas)
+            fig_roas.update_layout(height=360, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_roas, width="stretch", key=KeyManager.get_key("acq", "camp_roas_scatter"))
 
         with camp_right:
-            st.markdown("##### 💡 Campaign Diagnostics")
+            st.markdown("##### 💡 Campaign Diagnostics & Attribution")
             top_camp_name = campaign_df.iloc[0]["campaign"] if not campaign_df.empty else "Summer_Promo"
-            top_roas_camp = campaign_df.sort_values("revenue", ascending=False).iloc[0]["campaign"] if not campaign_df.empty else "Google_Brand"
+            best_roas_row = campaign_df.sort_values("roas", ascending=False).iloc[0] if not campaign_df.empty else None
+            best_roas_name = best_roas_row["campaign"] if best_roas_row is not None else "Google_Brand"
+            best_roas_val = best_roas_row["roas"] if best_roas_row is not None else 3.2
             ui.commentary(
-                "Attribution Summary",
+                "Unit Economics Summary",
                 [
-                    f"📢 **Volume Driver**: `{top_camp_name}` delivered the highest total traffic volume.",
-                    f"💎 **Top Revenue Campaign**: `{top_roas_camp}` yielded the highest monetary sales returns.",
-                    f"⚡ **Highest Engaged Channel**: `{campaign_df.sort_values('engagement_rate', ascending=False).iloc[0]['campaign']}` achieves top session duration & quality."
+                    f"📢 **Volume Driver**: `{top_camp_name}` delivered the highest traffic volume.",
+                    f"🎯 **Highest ROAS**: `{best_roas_name}` achieved peak **{best_roas_val:.2f}x** return on ad spend.",
+                    f"💰 **Overall Profitability**: Paid marketing contributed **TK {tot_profit:,.0f}** net profit impact."
                 ]
             )
 
-        st.markdown("##### 📋 Full Campaign Attribution Table")
+        st.markdown("##### 📋 Full Campaign Attribution & Unit Economics Table")
         camp_disp = campaign_df.copy()
         camp_disp["revenue"] = camp_disp["revenue"].apply(lambda x: f"TK {x:,.2f}")
+        camp_disp["ad_spend"] = camp_disp["ad_spend"].apply(lambda x: f"TK {x:,.2f}")
+        camp_disp["roas"] = camp_disp["roas"].apply(lambda x: f"{x:.2f}x")
+        camp_disp["cac"] = camp_disp["cac"].apply(lambda x: f"TK {x:,.0f}")
+        camp_disp["cpc"] = camp_disp["cpc"].apply(lambda x: f"TK {x:,.2f}")
+        camp_disp["net_profit"] = camp_disp["net_profit"].apply(lambda x: f"TK {x:,.2f}")
         camp_disp["engagement_rate"] = camp_disp["engagement_rate"].apply(lambda x: f"{x:.1f}%")
+
         st.dataframe(
-            camp_disp,
+            camp_disp[[
+                "campaign", "source_medium", "sessions", "conversions", "revenue",
+                "ad_spend", "roas", "cac", "cpc", "net_profit"
+            ]],
             column_config={
                 "campaign": "Campaign Name",
                 "source_medium": "Source / Medium",
                 "sessions": "Sessions",
                 "conversions": "Conversions",
                 "revenue": "Revenue Generated",
-                "engagement_rate": "Engagement Rate"
+                "ad_spend": "Est. Ad Spend",
+                "roas": "ROAS (x)",
+                "cac": "CAC (TK)",
+                "cpc": "CPC (TK)",
+                "net_profit": "Net Profit Impact"
             },
             hide_index=True,
             use_container_width=True
