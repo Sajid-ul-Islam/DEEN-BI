@@ -711,7 +711,12 @@ def render_intelligence_hub_page() -> None:
     elif selection in ["📊 Traffic Insights", "📊 Traffic & Acquisition"]:
         from .dashboard_lib.acquisition import render_acquisition_analytics
 
-        render_acquisition_analytics(data["sales_active"])
+        render_acquisition_analytics(
+            df_sales=data["sales_active"],
+            df_prev=data.get("prev_sales_active"),
+            window_config=data.get("window_config"),
+            window_label=data.get("window_label"),
+        )
 
     elif selection == "👥 Customer Insight":
         st.subheader("Customer Insight")

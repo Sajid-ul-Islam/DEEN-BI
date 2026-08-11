@@ -321,12 +321,25 @@ def _render_flags_matrix(
                 st.markdown(f"- {item}")
 
 
-def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFrame = None):
+def render_acquisition_analytics(
+    df_sales: pd.DataFrame,
+    df_customers: pd.DataFrame = None,
+    df_prev: pd.DataFrame = None,
+    window_config: dict = None,
+    window_label: str = None,
+):
     """
     Renders the upgraded Traffic & User Acquisition Dashboard with live GA4 integration,
     Green & Red Flag Diagnostics, Landing Pages, Geo Location, Campaign Performance, and E-Commerce Event Funnel metrics.
     """
     st.markdown("### 📊 Traffic Insights")
+
+    start_date = window_config.get("start_date_str") if window_config else None
+    end_date = window_config.get("end_date_str") if window_config else None
+    days_back = window_config.get("days_back", 30) if window_config else 30
+
+    ga4_start = start_date if start_date else f"{days_back}daysAgo"
+    ga4_end = end_date if end_date else "today"
 
     # --- Live GA4 & Meta API Mode Detection ---
     ga4_active = is_ga4_configured()
@@ -365,9 +378,9 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
     total_orders = order_df["order_id"].nunique() if not order_df.empty else 0
     total_revenue = sum_order_level_revenue(sales, order_df)
     
-    ga4_df = fetch_ga4_acquisition_metrics("30daysAgo", "today") if ga4_active else pd.DataFrame()
-    ga4_funnel = fetch_ga4_aarrr_funnel_metrics("30daysAgo", "today") if ga4_active else {}
-    ga4_engagement = fetch_ga4_user_engagement_metrics("30daysAgo", "today") if ga4_active else {}
+    ga4_df = fetch_ga4_acquisition_metrics(ga4_start, ga4_end) if ga4_active else pd.DataFrame()
+    ga4_funnel = fetch_ga4_aarrr_funnel_metrics(ga4_start, ga4_end) if ga4_active else {}
+    ga4_engagement = fetch_ga4_user_engagement_metrics(ga4_start, ga4_end) if ga4_active else {}
 
     # Calculate Core Numbers
     if ga4_active and not ga4_df.empty:
@@ -379,7 +392,7 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
         returning_users = ga4_funnel.get("retention_returning_users", int(active_users * 0.32))
         new_users = ga4_funnel.get("retention_new_users", active_users - returning_users)
         
-        channel_df = fetch_ga4_channel_breakdown("30daysAgo", "today")
+        channel_df = fetch_ga4_channel_breakdown(ga4_start, ga4_end)
         ref_df = ga4_df[ga4_df["source_medium"].str.contains("organic|referral|direct", case=False, na=False)]
         referral_sessions = int(ref_df["sessions"].sum()) if not ref_df.empty else int(total_sessions * 0.35)
         
@@ -808,7 +821,7 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
     with tab_campaign:
         st.markdown("#### 🎯 Marketing Campaign & Paid Traffic Attribution (ROAS & Unit Economics)")
 
-        raw_camp_df = fetch_ga4_campaign_performance("30daysAgo", "today") if ga4_active else pd.DataFrame()
+        raw_camp_df = fetch_ga4_campaign_performance(ga4_start, ga4_end) if ga4_active else pd.DataFrame()
         if raw_camp_df.empty:
             synth_camps = [
                 {"campaign": "Summer_Promo_Meta_2026", "source_medium": "facebook / cpc", "sessions": int(total_sessions * 0.35), "conversions": int(total_conversions * 0.38), "revenue": total_revenue * 0.38, "engagement_rate": 58.2},
