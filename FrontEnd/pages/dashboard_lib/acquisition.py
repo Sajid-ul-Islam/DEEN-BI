@@ -439,9 +439,11 @@ def render_acquisition_analytics(
             })
         channel_df = pd.DataFrame(chan_rows)
 
-    overall_cvr = (total_conversions / total_sessions * 100) if total_sessions else 0.0
-    activation_rate = (engaged_sessions / total_sessions * 100) if total_sessions else 0.0
-    retention_rate = (returning_users / active_users * 100) if active_users else 0.0
+    order_conversions = total_orders if total_orders > 0 else total_conversions
+    overall_cvr = (order_conversions / total_sessions * 100.0) if total_sessions > 0 else 0.0
+    overall_cvr = min(max(overall_cvr, 0.0), 100.0)
+    activation_rate = (engaged_sessions / total_sessions * 100.0) if total_sessions > 0 else 0.0
+    retention_rate = (returning_users / active_users * 100.0) if active_users > 0 else 0.0
 
     # --- TOP LEVEL GA4 PROPERTY KPI CARDS ---
     m1, m2, m3, m4, m5 = st.columns(5)

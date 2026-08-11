@@ -136,6 +136,10 @@ def calculate_campaign_unit_economics(campaign_df: pd.DataFrame) -> pd.DataFrame
     # Calculate CAC: ad_spend / conversions
     df["cac"] = np.where(df["conversions"] > 0, df["ad_spend"] / df["conversions"], 0.0)
 
+    # Calculate CVR: (conversions / sessions) * 100
+    df["cvr"] = np.where(df["sessions"] > 0, (df["conversions"] / df["sessions"]) * 100.0, 0.0)
+    df["cvr"] = df["cvr"].clip(lower=0.0, upper=100.0)
+
     # Calculate Net Profit Impact: revenue - ad_spend - estimated COGS (45%)
     df["net_profit"] = df["revenue"] - df["ad_spend"] - (df["revenue"] * 0.45)
 
