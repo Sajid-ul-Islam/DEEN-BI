@@ -12,21 +12,38 @@ from BackEnd.core.logging_config import get_logger
 logger = get_logger("ad_spend_service")
 
 
+from pathlib import Path
+
+
 def _get_secrets_dict() -> dict:
-    """Safely fetch Streamlit secrets dictionary."""
+    """Safely fetch Streamlit secrets dictionary, with local fallback for non-Streamlit threads/CLI."""
     try:
         if hasattr(st, "secrets") and st.secrets:
             return dict(st.secrets)
     except Exception:
         pass
+
+    secrets_path = Path(".streamlit/secrets.toml")
+    if secrets_path.exists():
+        try:
+            import tomllib
+            with open(secrets_path, "rb") as f:
+                return tomllib.load(f)
+        except Exception:
+            try:
+                import toml
+                return toml.load(secrets_path)
+            except Exception:
+                pass
     return {}
 
 
 def is_meta_ads_configured() -> bool:
     """Check if Meta Ad Account API credentials exist in secrets or environment."""
     sec = _get_secrets_dict()
-    token = sec.get("META_ACCESS_TOKEN") or os.environ.get("META_ACCESS_TOKEN")
-    account_id = sec.get("META_AD_ACCOUNT_ID") or os.environ.get("META_AD_ACCOUNT_ID")
+    meta_sec = sec.get("meta", {}) if isinstance(sec.get("meta"), dict) else {}
+    token = sec.get("META_ACCESS_TOKEN") or meta_sec.get("access_token") or os.environ.get("META_ACCESS_TOKEN")
+    account_id = sec.get("META_AD_ACCOUNT_ID") or meta_sec.get("ad_account_id") or os.environ.get("META_AD_ACCOUNT_ID")
     return bool(token and account_id)
 
 

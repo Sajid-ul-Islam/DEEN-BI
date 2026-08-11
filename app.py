@@ -468,7 +468,14 @@ def _inject_meta_pixel():
     """
     # st.secrets (secrets.toml / Streamlit Cloud) takes priority; os.environ is the local fallback
     try:
-        pixel_id = st.secrets.get("META_PIXEL_ID", "") or os.environ.get("META_PIXEL_ID", "")
+        sec = dict(st.secrets) if (hasattr(st, "secrets") and st.secrets) else {}
+        meta_sec = sec.get("meta", {}) if isinstance(sec.get("meta"), dict) else {}
+        pixel_id = (
+            sec.get("META_PIXEL_ID")
+            or meta_sec.get("pixel_id")
+            or meta_sec.get("META_PIXEL_ID")
+            or os.environ.get("META_PIXEL_ID", "")
+        )
     except Exception:
         pixel_id = os.environ.get("META_PIXEL_ID", "")
     if not pixel_id:
