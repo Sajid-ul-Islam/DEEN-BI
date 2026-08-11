@@ -51,8 +51,16 @@ def calculate_campaign_unit_economics(campaign_df: pd.DataFrame) -> pd.DataFrame
     """
     Enhances a campaign DataFrame (containing campaign, source_medium, sessions, conversions, revenue)
     with ad_spend, cpc, roas, cac, and profit_impact columns.
+    Merges live Meta Graph API Insights when available.
     """
+    from BackEnd.services.meta_service import is_meta_api_configured, fetch_meta_campaign_insights
+
+    # Fetch live Meta Insights if configured
+    meta_df = fetch_meta_campaign_insights("last_30d") if is_meta_api_configured() else pd.DataFrame()
+
     if campaign_df.empty:
+        if not meta_df.empty:
+            return meta_df
         return pd.DataFrame(columns=[
             "campaign", "source_medium", "sessions", "conversions", "revenue",
             "engagement_rate", "ad_spend", "clicks", "cpc", "roas", "cac", "net_profit"
@@ -66,6 +74,32 @@ def calculate_campaign_unit_economics(campaign_df: pd.DataFrame) -> pd.DataFrame
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
         else:
             df[col] = 0
+
+    # If live Meta Insights are available, map live spend and ROAS onto Meta campaigns
+    if not meta_df.empty:
+        meta_map = meta_df.set_index("campaign").to_dict("index")
+        for idx, row in df.iterrows():
+            c_name = str(row.get("campaign", ""))
+            src = str(row.get("source_medium", "")).lower()
+
+            if c_name in meta_map:
+                m_info = meta_map[c_name]
+                df.at[idx, "ad_spend"] = m_info.get("ad_spend", 0.0)
+                df.at[idx, "clicks"] = m_info.get("clicks", int(row.get("sessions", 0)))
+                df.at[idx, "cpc"] = m_info.get("cpc", 0.0)
+                df.at[idx, "roas"] = m_info.get("roas", 0.0)
+                df.at[idx, "cac"] = m_info.get("cac", 0.0)
+                df.at[idx, "net_profit"] = m_info.get("net_profit", 0.0)
+                if "reach" in m_info:
+                    df.at[idx, "reach"] = m_info.get("reach", 0)
+                if "impressions" in m_info:
+                    df.at[idx, "impressions"] = m_info.get("impressions", 0)
+            elif "facebook" in src or "instagram" in src or "meta" in src:
+                # Top Meta campaign match fallback from meta_df
+                top_meta = meta_df.iloc[0]
+                df.at[idx, "ad_spend"] = float(top_meta.get("ad_spend", 0.0))
+                df.at[idx, "roas"] = float(top_meta.get("roas", 0.0))
+                df.at[idx, "cac"] = float(top_meta.get("cac", 0.0))
 
     # Model or calculate ad spend based on source / medium
     if "ad_spend" not in df.columns:

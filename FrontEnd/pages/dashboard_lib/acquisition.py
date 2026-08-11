@@ -328,23 +328,36 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
     """
     st.markdown("### 📊 Traffic & User Acquisition")
 
-    # --- Live GA4 vs Synthetic Mode Detection ---
+    # --- Live GA4 & Meta API Mode Detection ---
     ga4_active = is_ga4_configured()
-    
-    if ga4_active:
-        st.markdown(
-            '<div style="display: inline-flex; align-items: center; background: rgba(16, 185, 129, 0.15); '
-            'border: 1px solid rgba(16, 185, 129, 0.3); padding: 6px 14px; border-radius: 20px; margin-bottom: 15px;">'
-            '<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #10b981;"></span>'
-            '<span style="color: #10b981; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.5px;">LIVE GA4 STREAMING ACTIVE</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info(
-            "💡 **Synthetic Mode Active** — GA4 API is unconfigured. "
-            "Traffic figures are modeled from sales conversions. Add GA4 credentials in `.streamlit/secrets.toml` for live metrics."
-        )
+    from BackEnd.services.meta_service import is_meta_api_configured, get_meta_credentials
+    meta_active = is_meta_api_configured()
+
+    badge_cols = st.columns([1, 1])
+    with badge_cols[0]:
+        if ga4_active:
+            st.markdown(
+                '<div style="display: inline-flex; align-items: center; background: rgba(16, 185, 129, 0.15); '
+                'border: 1px solid rgba(16, 185, 129, 0.3); padding: 6px 14px; border-radius: 20px; margin-bottom: 15px;">'
+                '<span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #10b981;"></span>'
+                '<span style="color: #10b981; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.5px;">LIVE GA4 STREAMING ACTIVE</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("💡 **Synthetic Mode Active** — GA4 API is unconfigured.")
+
+    with badge_cols[1]:
+        if meta_active:
+            _, meta_acc_id = get_meta_credentials()
+            st.markdown(
+                f'<div style="display: inline-flex; align-items: center; background: rgba(59, 130, 246, 0.15); '
+                f'border: 1px solid rgba(59, 130, 246, 0.3); padding: 6px 14px; border-radius: 20px; margin-bottom: 15px;">'
+                f'<span style="width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; margin-right: 8px; box-shadow: 0 0 8px #3b82f6;"></span>'
+                f'<span style="color: #3b82f6; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.5px;">LIVE META ADS API CONNECTED ({meta_acc_id})</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     # --- Fetch Core Sales & GA4 Data ---
     sales = ensure_sales_schema(df_sales)

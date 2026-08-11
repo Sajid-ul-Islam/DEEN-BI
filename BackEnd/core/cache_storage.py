@@ -68,7 +68,7 @@ def _remote_cache_root() -> str:
 
 
 def remote_cache_enabled() -> bool:
-    return bool(_remote_cache_root())
+    return bool(_remote_cache_root()) and _get_gcs_filesystem() is not None
 
 
 def _remote_cache_namespace() -> str:
@@ -83,7 +83,7 @@ def build_cache_target(
     local_subdir: str | None = None,
 ) -> str | Path:
     remote_root = _remote_cache_root()
-    if remote_root:
+    if remote_root and _get_gcs_filesystem() is not None:
         namespace = _remote_cache_namespace()
         return f"{remote_root}/{namespace}/{filename}"
 
@@ -94,7 +94,8 @@ def build_cache_target(
 
 def target_exists(target: str | Path) -> bool:
     if _is_remote_target(target):
-        return _remote_fs(target).exists(str(target))
+        fs = _remote_fs(target)
+        return fs.exists(str(target)) if fs is not None else False
     return Path(target).exists()
 
 
@@ -103,7 +104,7 @@ def remove_target(target: str | Path):
         if _is_remote_target(target):
             fs = _remote_fs(target)
             target_str = str(target)
-            if fs.exists(target_str):
+            if fs and fs.exists(target_str):
                 fs.rm(target_str)
             return
         path = Path(target)
@@ -117,16 +118,20 @@ def read_text(target: str | Path, encoding: str = "utf-8") -> str:
     if not target_exists(target):
         return ""
     if _is_remote_target(target):
-        with _remote_fs(target).open(str(target), "r", encoding=encoding) as handle:
-            return handle.read()
+        fs = _remote_fs(target)
+        if fs is not None:
+            with fs.open(str(target), "r", encoding=encoding) as handle:
+                return handle.read()
     return Path(target).read_text(encoding=encoding)
 
 
 def write_text(target: str | Path, content: str, encoding: str = "utf-8"):
     if _is_remote_target(target):
-        with _remote_fs(target).open(str(target), "w", encoding=encoding) as handle:
-            handle.write(content)
-        return
+        fs = _remote_fs(target)
+        if fs is not None:
+            with fs.open(str(target), "w", encoding=encoding) as handle:
+                handle.write(content)
+            return
     path = Path(target)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding=encoding)
@@ -151,8 +156,10 @@ def read_parquet(target: str | Path) -> pd.DataFrame:
         return pd.DataFrame()
     try:
         if _is_remote_target(target):
-            with _remote_fs(target).open(str(target), "rb") as handle:
-                return pd.read_parquet(handle)
+            fs = _remote_fs(target)
+            if fs is not None:
+                with fs.open(str(target), "rb") as handle:
+                    return pd.read_parquet(handle)
         return pd.read_parquet(target)
     except Exception:
         return pd.DataFrame()
@@ -160,9 +167,11 @@ def read_parquet(target: str | Path) -> pd.DataFrame:
 
 def write_parquet(df: pd.DataFrame, target: str | Path, *, index: bool = False):
     if _is_remote_target(target):
-        with _remote_fs(target).open(str(target), "wb") as handle:
-            df.to_parquet(handle, index=index)
-        return
+        fs = _remote_fs(target)
+        if fs is not None:
+            with fs.open(str(target), "wb") as handle:
+                df.to_parquet(handle, index=index)
+            return
     path = Path(target)
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path, index=index)
@@ -176,32 +185,33 @@ def _remote_fs(target: str | Path):
     target_str = str(target)
     if target_str.startswith("gs://"):
         return _get_gcs_filesystem()
-    raise ValueError(f"Unsupported persistent cache target: {target_str}")
+    return None
 
 
 @lru_cache(maxsize=1)
 def _get_gcs_filesystem():
     try:
         import gcsfs
-    except ImportError as exc:
-        raise RuntimeError(
-            "Persistent GCS cache requires `gcsfs`. Add it to requirements.txt."
-        ) from exc
+        kwargs: dict[str, Any] = {}
+        project = (
+            os.getenv("GCP_PROJECT")
+            or os.getenv("GOOGLE_CLOUD_PROJECT")
+            or os.getenv("GCLOUD_PROJECT")
+        )
+        if project:
+            kwargs["project"] = project
 
-    kwargs: dict[str, Any] = {}
-    project = (
-        os.getenv("GCP_PROJECT")
-        or os.getenv("GOOGLE_CLOUD_PROJECT")
-        or os.getenv("GCLOUD_PROJECT")
-    )
-    if project:
-        kwargs["project"] = project
+        token = _load_gcs_token()
+        if token is not None:
+            kwargs["token"] = token
 
-    token = _load_gcs_token()
-    if token is not None:
-        kwargs["token"] = token
-
-    return gcsfs.GCSFileSystem(**kwargs)
+        return gcsfs.GCSFileSystem(**kwargs)
+    except Exception as exc:
+        from BackEnd.core.logging_config import get_logger
+        get_logger("cache_storage").warning(
+            f"GCS filesystem initialization skipped ({exc}). Falling back to local cache storage."
+        )
+        return None
 
 
 def _load_gcs_token() -> Any | None:

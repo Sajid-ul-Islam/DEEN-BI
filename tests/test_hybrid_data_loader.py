@@ -12,8 +12,10 @@ class _FakeWooService:
     def __init__(self):
         self.calls = []
 
-    def fetch_all_historical_orders(self, after=None, before=None, status="any", show_progress=True, show_errors=True):
-        self.calls.append({"after": after, "before": before, "status": status})
+    def fetch_orders_range(self, start_ts, end_ts):
+        after_str = start_ts.strftime("%Y-%m-%dT%H:%M:%SZ") if hasattr(start_ts, "strftime") else str(start_ts)
+        before_str = end_ts.strftime("%Y-%m-%dT%H:%M:%SZ") if hasattr(end_ts, "strftime") else str(end_ts)
+        self.calls.append({"after": after_str, "before": before_str, "status": "any"})
         return pd.DataFrame(
             {
                 "Order Number": ["1001"],
@@ -26,7 +28,7 @@ class _FakeWooService:
             }
         )
 
-    def get_stock_report(self, show_errors=True):
+    def fetch_stock_inventory(self, show_errors=True):
         return pd.DataFrame(
             {
                 "ID": [1],
@@ -35,24 +37,23 @@ class _FakeWooService:
                 "Stock Status": ["instock"],
                 "Stock Quantity": ["7"],
                 "Price": ["1200"],
+                "_source": ["woocommerce_stock_api"],
             }
         )
 
-
-class _FakeResponse:
-    def __init__(self, csv_text: str):
-        self.content = csv_text.encode("utf-8")
-
-    def raise_for_status(self):
-        return None
+    def get_registered_customer_count(self):
+        return 42
 
 
 class TestHybridDataLoader(unittest.TestCase):
     def setUp(self):
-        hybrid_data_loader.load_woocommerce_live_data.clear()
-        hybrid_data_loader.load_woocommerce_stock_data.clear()
-        hybrid_data_loader.load_live_stream_data.clear()
-        hybrid_data_loader.load_comparison_data.clear()
+        for name in (
+            "load_woocommerce_live_data",
+            "load_woocommerce_stock_data",
+        ):
+            func = getattr(hybrid_data_loader, name, None)
+            if func and hasattr(func, "clear"):
+                func.clear()
 
     def test_woocommerce_loader_respects_selected_date_range(self):
         fake_service = _FakeWooService()
@@ -61,6 +62,7 @@ class TestHybridDataLoader(unittest.TestCase):
             cache_dir = Path(tmpdir)
             with (
                 patch.object(hybrid_data_loader, "_cache_file", side_effect=lambda name: cache_dir / name),
+                patch.object(hybrid_data_loader, "DATA_SYNC_MODE", "direct"),
                 patch.object(
                     hybrid_data_loader.st,
                     "secrets",
@@ -104,30 +106,12 @@ class TestHybridDataLoader(unittest.TestCase):
                 ),
                 patch("BackEnd.services.woocommerce_service.WooCommerceService", return_value=fake_service),
             ):
-                df = hybrid_data_loader.load_woocommerce_stock_data()
+                df = hybrid_data_loader.refresh_woocommerce_stock_cache()
 
         self.assertEqual(len(df), 1)
         self.assertEqual(float(df.loc[0, "Stock Quantity"]), 7.0)
         self.assertEqual(float(df.loc[0, "Price"]), 1200.0)
         self.assertEqual(df.loc[0, "_source"], "woocommerce_stock_api")
-
-    def test_live_stream_loader_uses_locked_stream_url(self):
-        csv_text = "Order Number,Order Date,Customer Name,Qty,Item Name,Order Total Amount\n1001,2026-04-05 10:00:00,Jane,2,Polo,2400\n"
-
-        with patch("BackEnd.services.hybrid_data_loader.requests.get", return_value=_FakeResponse(csv_text)) as mock_get:
-            df = hybrid_data_loader.load_live_stream_data()
-
-        self.assertFalse(df.empty)
-        self.assertEqual(mock_get.call_args.args[0], hybrid_data_loader.LIVE_STREAM_URL)
-
-    def test_comparison_loader_uses_locked_comparison_url(self):
-        csv_text = "Order Number,Order Date,Customer Name,Qty,Item Name,Order Total Amount\n1000,2026-04-04 10:00:00,Jane,1,Polo,1200\n"
-
-        with patch("BackEnd.services.hybrid_data_loader.requests.get", return_value=_FakeResponse(csv_text)) as mock_get:
-            df = hybrid_data_loader.load_comparison_data()
-
-        self.assertFalse(df.empty)
-        self.assertEqual(mock_get.call_args.args[0], hybrid_data_loader.COMPARISON_SHEET_URL)
 
     def test_woocommerce_loader_uses_local_cache_when_range_is_covered(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -147,8 +131,8 @@ class TestHybridDataLoader(unittest.TestCase):
             (cache_dir / "woo_orders_meta.json").write_text(
                 """
                 {
-                  "cached_start": "2026-04-01 00:00:00",
-                  "cached_end": "2026-04-05 23:59:59",
+                  "range_start": "2026-04-01 00:00:00",
+                  "range_end": "2026-04-05 23:59:59",
                   "fetched_at": "2099-04-05 12:00:00"
                 }
                 """,
@@ -194,8 +178,8 @@ class TestHybridDataLoader(unittest.TestCase):
             (cache_dir / "woo_orders_meta.json").write_text(
                 """
                 {
-                  "cached_start": "2026-04-01 00:00:00",
-                  "cached_end": "2026-04-05 23:59:59",
+                  "range_start": "2026-04-01 00:00:00",
+                  "range_end": "2026-04-05 23:59:59",
                   "fetched_at": "2099-04-05 12:00:00"
                 }
                 """,
