@@ -139,6 +139,10 @@ def _render_workspace_sidebar():
             st.session_state.active_section = "🛡️ Strategic Command"
         if st.session_state.active_section == "🔄 Returns & Net Sales":
             st.session_state.active_section = "🔄 Returns Insights"
+        if st.session_state.get("active_section") in ["📊 Traffic & Acquisition", "Traffic & Acquisition"]:
+            st.session_state.active_section = "📊 Traffic Insights"
+        if st.session_state.get("active_section") in ["📥 Sales Data Ingestion", "Sales Data Ingestion"]:
+            st.session_state.active_section = "📥 Sales Insights"
 
         def _update_section(new_section):
             if st.session_state.get("active_section") != new_section:
@@ -147,21 +151,21 @@ def _render_workspace_sidebar():
                 garbage_collect_session_state(clear_data=False)
 
         def page_sales_overview(): _update_section("💎 Sales Overview")
-        def page_sales_data_ingestion(): _update_section("📥 Sales Data Ingestion")
+        def page_sales_insights(): _update_section("📥 Sales Insights")
         def page_stock_insight(): _update_section("📦 Stock Insight")
         def page_customer_insight(): _update_section("👥 Customer Insight")
         def page_returns_insights(): _update_section("🔄 Returns Insights")
-        def page_traffic_acquisition(): _update_section("📊 Traffic & Acquisition")
+        def page_traffic_insights(): _update_section("📊 Traffic Insights")
         def page_strategic_command(): _update_section("🛡️ Strategic Command")
 
         pg = st.navigation({
             "⚡ Navigation Hub": [
                 st.Page(page_sales_overview, title="Sales Overview", icon="💎", default=True, url_path="sales-overview"),
-                st.Page(page_sales_data_ingestion, title="Sales Data Ingestion", icon="📥", url_path="sales-ingestion"),
+                st.Page(page_sales_insights, title="Sales Insights", icon="📥", url_path="sales-insights"),
                 st.Page(page_stock_insight, title="Stock Insight", icon="📦", url_path="stock-insight"),
                 st.Page(page_customer_insight, title="Customer Insight", icon="👥", url_path="customer-insight"),
                 st.Page(page_returns_insights, title="Returns Insights", icon="🔄", url_path="returns-insights"),
-                st.Page(page_traffic_acquisition, title="Traffic & Acquisition", icon="📊", url_path="traffic"),
+                st.Page(page_traffic_insights, title="Traffic Insights", icon="📊", url_path="traffic-insights"),
                 st.Page(page_strategic_command, title="Strategic Command", icon="🛡️", url_path="strategic-command"),
             ]
         })

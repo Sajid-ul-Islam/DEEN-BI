@@ -326,7 +326,7 @@ def render_acquisition_analytics(df_sales: pd.DataFrame, df_customers: pd.DataFr
     Renders the upgraded Traffic & User Acquisition Dashboard with live GA4 integration,
     Green & Red Flag Diagnostics, Landing Pages, Geo Location, Campaign Performance, and E-Commerce Event Funnel metrics.
     """
-    st.markdown("### 📊 Traffic & User Acquisition")
+    st.markdown("### 📊 Traffic Insights")
 
     # --- Live GA4 & Meta API Mode Detection ---
     ga4_active = is_ga4_configured()

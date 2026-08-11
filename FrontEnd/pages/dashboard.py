@@ -43,7 +43,7 @@ _sum_order_level_revenue = sum_order_level_revenue
 
 SECTIONS_REQUIRING_CUSTOMERS = {"💎 Sales Overview", "👥 Customer Insight", "🚀 Data Pilot"}
 SECTIONS_REQUIRING_ML = {"💎 Sales Overview", "📦 Stock Insight"}
-SECTIONS_REQUIRING_STOCK = {"📥 Sales Data Ingestion", "📦 Stock Insight", "🚀 Data Pilot"}
+SECTIONS_REQUIRING_STOCK = {"📥 Sales Insights", "📥 Sales Data Ingestion", "📦 Stock Insight", "🚀 Data Pilot"}
 
 
 @st.cache_data(show_spinner=False)
@@ -106,13 +106,15 @@ class WindowConfig(TypedDict):
 
 def _get_window_config(window: str) -> WindowConfig:
     today = date.today()
-    start_dt = today
-    end_dt = today
 
     if window == "MTD":
-        days_back = (today - today.replace(day=1)).days
+        start_dt = today.replace(day=1)
+        end_dt = today
+        days_back = (end_dt - start_dt).days
     elif window == "YTD":
-        days_back = (today - today.replace(month=1, day=1)).days
+        start_dt = today.replace(month=1, day=1)
+        end_dt = today
+        days_back = (end_dt - start_dt).days
     elif window == "Custom Date Range":
         start_dt = st.session_state.get("wc_sync_start_date", today)
         end_dt = st.session_state.get("wc_sync_end_date", today)
@@ -706,7 +708,7 @@ def render_intelligence_hub_page() -> None:
             )
         st.divider()
 
-    elif selection == "📊 Traffic & Acquisition":
+    elif selection in ["📊 Traffic Insights", "📊 Traffic & Acquisition"]:
         from .dashboard_lib.acquisition import render_acquisition_analytics
 
         render_acquisition_analytics(data["sales_active"])
@@ -727,7 +729,7 @@ def render_intelligence_hub_page() -> None:
 
         render_returns_tracker_page()
 
-    elif selection == "📥 Sales Data Ingestion":
+    elif selection in ["📥 Sales Insights", "📥 Sales Data Ingestion"]:
         from .dashboard_lib.deep_dive import render_deep_dive_tab
 
         render_deep_dive_tab(data["sales_active"], data["stock"], data["prev_sales_active"], window_label=data["window_label"])

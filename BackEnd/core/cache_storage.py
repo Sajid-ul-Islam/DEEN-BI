@@ -92,49 +92,92 @@ def build_cache_target(
     return target_dir / filename
 
 
+def _fallback_local_path(target: str | Path) -> Path:
+    if isinstance(target, Path):
+        return target
+    target_str = str(target)
+    if "://" in target_str:
+        filename = Path(target_str).name
+        try:
+            from BackEnd.core.paths import CACHE_DIR
+            local_path = CACHE_DIR / filename
+        except Exception:
+            local_path = Path("BackEnd/cache") / filename
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        return local_path
+    return Path(target_str)
+
+
 def target_exists(target: str | Path) -> bool:
     if _is_remote_target(target):
-        fs = _remote_fs(target)
-        return fs.exists(str(target)) if fs is not None else False
+        try:
+            fs = _remote_fs(target)
+            if fs is not None:
+                return fs.exists(str(target))
+        except Exception as exc:
+            from BackEnd.core.logging_config import get_logger
+            get_logger("cache_storage").warning(
+                f"Remote target_exists check failed ({exc}). Falling back to local cache."
+            )
+            return _fallback_local_path(target).exists()
     return Path(target).exists()
 
 
 def remove_target(target: str | Path):
-    try:
-        if _is_remote_target(target):
+    if _is_remote_target(target):
+        try:
             fs = _remote_fs(target)
             target_str = str(target)
             if fs and fs.exists(target_str):
                 fs.rm(target_str)
-            return
-        path = Path(target)
-        if path.exists():
-            path.unlink()
-    except Exception:
-        pass
+                return
+        except Exception as exc:
+            from BackEnd.core.logging_config import get_logger
+            get_logger("cache_storage").warning(
+                f"Remote remove_target failed ({exc}). Falling back to local cache."
+            )
+    local_p = _fallback_local_path(target)
+    if local_p.exists():
+        try:
+            local_p.unlink()
+        except Exception:
+            pass
 
 
 def read_text(target: str | Path, encoding: str = "utf-8") -> str:
-    if not target_exists(target):
-        return ""
     if _is_remote_target(target):
-        fs = _remote_fs(target)
-        if fs is not None:
-            with fs.open(str(target), "r", encoding=encoding) as handle:
-                return handle.read()
-    return Path(target).read_text(encoding=encoding)
+        try:
+            fs = _remote_fs(target)
+            if fs is not None and fs.exists(str(target)):
+                with fs.open(str(target), "r", encoding=encoding) as handle:
+                    return handle.read()
+        except Exception as exc:
+            from BackEnd.core.logging_config import get_logger
+            get_logger("cache_storage").warning(
+                f"Remote read_text failed ({exc}). Falling back to local cache."
+            )
+            local_p = _fallback_local_path(target)
+            return local_p.read_text(encoding=encoding) if local_p.exists() else ""
+    local_p = Path(target)
+    return local_p.read_text(encoding=encoding) if local_p.exists() else ""
 
 
 def write_text(target: str | Path, content: str, encoding: str = "utf-8"):
     if _is_remote_target(target):
-        fs = _remote_fs(target)
-        if fs is not None:
-            with fs.open(str(target), "w", encoding=encoding) as handle:
-                handle.write(content)
-            return
-    path = Path(target)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding=encoding)
+        try:
+            fs = _remote_fs(target)
+            if fs is not None:
+                with fs.open(str(target), "w", encoding=encoding) as handle:
+                    handle.write(content)
+                return
+        except Exception as exc:
+            from BackEnd.core.logging_config import get_logger
+            get_logger("cache_storage").warning(
+                f"Remote write_text failed ({exc}). Falling back to local cache."
+            )
+    local_p = _fallback_local_path(target)
+    local_p.parent.mkdir(parents=True, exist_ok=True)
+    local_p.write_text(content, encoding=encoding)
 
 
 def read_json(target: str | Path) -> dict[str, Any]:
@@ -152,29 +195,49 @@ def write_json(target: str | Path, payload: dict[str, Any]):
 
 
 def read_parquet(target: str | Path) -> pd.DataFrame:
-    if not target_exists(target):
-        return pd.DataFrame()
-    try:
-        if _is_remote_target(target):
+    if _is_remote_target(target):
+        try:
             fs = _remote_fs(target)
-            if fs is not None:
+            if fs is not None and fs.exists(str(target)):
                 with fs.open(str(target), "rb") as handle:
                     return pd.read_parquet(handle)
-        return pd.read_parquet(target)
-    except Exception:
-        return pd.DataFrame()
+        except Exception as exc:
+            from BackEnd.core.logging_config import get_logger
+            get_logger("cache_storage").warning(
+                f"Remote read_parquet failed ({exc}). Falling back to local cache."
+            )
+            local_p = _fallback_local_path(target)
+            if local_p.exists():
+                try:
+                    return pd.read_parquet(local_p)
+                except Exception:
+                    return pd.DataFrame()
+            return pd.DataFrame()
+    local_p = Path(target)
+    if local_p.exists():
+        try:
+            return pd.read_parquet(local_p)
+        except Exception:
+            return pd.DataFrame()
+    return pd.DataFrame()
 
 
 def write_parquet(df: pd.DataFrame, target: str | Path, *, index: bool = False):
     if _is_remote_target(target):
-        fs = _remote_fs(target)
-        if fs is not None:
-            with fs.open(str(target), "wb") as handle:
-                df.to_parquet(handle, index=index)
-            return
-    path = Path(target)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=index)
+        try:
+            fs = _remote_fs(target)
+            if fs is not None:
+                with fs.open(str(target), "wb") as handle:
+                    df.to_parquet(handle, index=index)
+                return
+        except Exception as exc:
+            from BackEnd.core.logging_config import get_logger
+            get_logger("cache_storage").warning(
+                f"Remote write_parquet failed ({exc}). Falling back to local cache."
+            )
+    local_p = _fallback_local_path(target)
+    local_p.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(local_p, index=index)
 
 
 def _is_remote_target(target: str | Path) -> bool:

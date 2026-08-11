@@ -165,7 +165,7 @@ def _mark_refresh_status(kind: str, state: str, **extra):
 
 def _refresh_is_running(kind: str) -> bool:
     lock_path = _refresh_lock_path(kind)
-    if not lock_path.exists():
+    if not target_exists(lock_path):
         return False
     lock = _read_json(lock_path)
     started_at = pd.to_datetime(lock.get("started_at"), errors="coerce")
@@ -562,7 +562,7 @@ def refresh_woocommerce_orders_cache(
         
         # Load existing cache and merge
         existing = pd.DataFrame()
-        if cache_path.exists():
+        if target_exists(cache_path):
             existing = _read_parquet(cache_path)
             
         merged = dedupe_sales_data(pd.concat([ensure_sales_schema(df_new), ensure_sales_schema(existing)], ignore_index=True))

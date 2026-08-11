@@ -3,7 +3,7 @@ APP_VERSION = "v9.5"
 
 PRIMARY_NAV = [
     "📈 Live Dashboard",
-    "📥 Sales Data Ingestion",
+    "📥 Sales Insights",
     "📦 Current Stock Analytics",
     "📊 Inventory Distribution",
 ]

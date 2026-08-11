@@ -391,132 +391,142 @@ def render_category_performance_matrix(df_sales: pd.DataFrame, df_prev: pd.DataF
             df_sales["Returned_Qty"] = keys.map(order_sku_returns_qty).fillna(0.0)
             df_sales["Exchanged_Qty"] = keys.map(order_sku_exchanges).fillna(0.0)
 
+        # Ensure Category column exists
+        if "Category" not in df_sales.columns:
+            from BackEnd.core.categories import get_category_for_sales
+            df_sales["Category"] = df_sales.apply(lambda x: get_category_for_sales(x.get("item_name", ""), x.get("sku", "")), axis=1)
+
         df_sales_matrix = df_sales.copy()
         
-        # Remove bundles (Combo, Choose Any, etc.) from the performance matrix
-        df_sales_matrix = df_sales_matrix[~df_sales_matrix["Category"].astype(str).str.contains("Bundle", case=False, na=False)]
-        
-        if show_master_only:
+        # Remove bundles (Combo, Choose Any, etc.) from the performance matrix if non-bundle items exist
+        if "Category" in df_sales_matrix.columns:
+            non_bundle = df_sales_matrix[~df_sales_matrix["Category"].astype(str).str.contains("Bundle", case=False, na=False)]
+            if not non_bundle.empty:
+                df_sales_matrix = non_bundle
+
+        if show_master_only and "Category" in df_sales_matrix.columns:
             df_sales_matrix["Category"] = df_sales_matrix["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
 
-        curr_agg = df_sales_matrix.groupby("Category").agg(
-            Total_Sold=("qty", "sum"),
-            Total_Revenue=("item_revenue", "sum"),
-            Return_Loss=("Return_Loss", "sum"),
-            Returned_Qty=("Returned_Qty", "sum"),
-            Exchanged_Qty=("Exchanged_Qty", "sum")
-        ).reset_index()
-        curr_agg["ASP"] = (curr_agg["Total_Revenue"] / curr_agg["Total_Sold"].replace(0, 1)).fillna(0)
-        curr_agg["Net_Yield"] = ((curr_agg["Total_Revenue"] - curr_agg["Return_Loss"]) / curr_agg["Total_Revenue"].replace(0, 1) * 100).fillna(100).clip(lower=0, upper=100)
-        
-        if df_prev is not None and not df_prev.empty:
-            df_prev_matrix = df_prev.copy()
-            
-            # Remove bundles (Combo, Choose Any, etc.) from the performance matrix
-            df_prev_matrix = df_prev_matrix[~df_prev_matrix["Category"].astype(str).str.contains("Bundle", case=False, na=False)]
-            
-            if show_master_only:
-                df_prev_matrix["Category"] = df_prev_matrix["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
-
-            prev_agg = df_prev_matrix.groupby("Category").agg(
-                Prev_Sold=("qty", "sum"),
-                Prev_Revenue=("item_revenue", "sum")
+        if "Category" in df_sales_matrix.columns and not df_sales_matrix.empty:
+            curr_agg = df_sales_matrix.groupby("Category").agg(
+                Total_Sold=("qty", "sum"),
+                Total_Revenue=("item_revenue", "sum"),
+                Return_Loss=("Return_Loss", "sum"),
+                Returned_Qty=("Returned_Qty", "sum"),
+                Exchanged_Qty=("Exchanged_Qty", "sum")
             ).reset_index()
-            prev_agg["Prev_ASP"] = (prev_agg["Prev_Revenue"] / prev_agg["Prev_Sold"].replace(0, 1)).fillna(0)
-            merged = curr_agg.merge(prev_agg, on="Category", how="outer").fillna(0)
-        else:
-            merged = curr_agg.copy()
-            merged["Prev_Sold"] = 0
-            merged["Prev_Revenue"] = 0
-            merged["Prev_ASP"] = 0
+            curr_agg["ASP"] = (curr_agg["Total_Revenue"] / curr_agg["Total_Sold"].replace(0, 1)).fillna(0)
+            curr_agg["Net_Yield"] = ((curr_agg["Total_Revenue"] - curr_agg["Return_Loss"]) / curr_agg["Total_Revenue"].replace(0, 1) * 100).fillna(100).clip(lower=0, upper=100)
+            
+            if df_prev is not None and not df_prev.empty and "Category" in df_prev.columns:
+                df_prev_matrix = df_prev.copy()
+                non_bundle_prev = df_prev_matrix[~df_prev_matrix["Category"].astype(str).str.contains("Bundle", case=False, na=False)]
+                if not non_bundle_prev.empty:
+                    df_prev_matrix = non_bundle_prev
+                
+                if show_master_only:
+                    df_prev_matrix["Category"] = df_prev_matrix["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
 
-        def format_trend(curr, prev):
-            if prev == 0 and curr > 0:
-                return "🚀 New"
-            elif prev == 0 and curr == 0:
-                return "➖"
-            diff = curr - prev
-            pct = (diff / prev) * 100
-            if diff > 0:
-                return f"▲ +{pct:.1f}%"
-            elif diff < 0:
-                return f"▼ {abs(pct):.1f}%"
+                prev_agg = df_prev_matrix.groupby("Category").agg(
+                    Prev_Sold=("qty", "sum"),
+                    Prev_Revenue=("item_revenue", "sum")
+                ).reset_index()
+                prev_agg["Prev_ASP"] = (prev_agg["Prev_Revenue"] / prev_agg["Prev_Sold"].replace(0, 1)).fillna(0)
+                merged = curr_agg.merge(prev_agg, on="Category", how="outer").fillna(0)
             else:
-                return "➖ 0%"
+                merged = curr_agg.copy()
+                merged["Prev_Sold"] = 0
+                merged["Prev_Revenue"] = 0
+                merged["Prev_ASP"] = 0
 
-        merged["Sold Trend"] = merged.apply(lambda x: format_trend(x["Total_Sold"], x["Prev_Sold"]), axis=1)
-        merged["Rev Trend"] = merged.apply(lambda x: format_trend(x["Total_Revenue"], x["Prev_Revenue"]), axis=1)
-        merged["ASP Trend"] = merged.apply(lambda x: format_trend(x["ASP"], x["Prev_ASP"]), axis=1)
-        
-        merged["Return %"] = (merged["Returned_Qty"] / merged["Total_Sold"].replace(0, 1)) * 100
-        merged["Exchange %"] = (merged["Exchanged_Qty"] / merged["Total_Sold"].replace(0, 1)) * 100
-        
-        merged["Master Category"] = merged["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
-        if not show_master_only:
-            merged["Sub Category"] = merged["Category"].apply(get_subcategory_name)
-        
-        merged = merged.sort_values(["Total_Revenue", "Master Category"], ascending=[False, True])
-        
-        cols_to_disp = ["Master Category"]
-        if not show_master_only:
-            cols_to_disp.append("Sub Category")
-        cols_to_disp.extend(["Total_Sold", "Returned_Qty", "Return %", "Exchanged_Qty", "Exchange %", "Sold Trend", "Total_Revenue", "Rev Trend", "ASP", "ASP Trend", "Net_Yield"])
+            def format_trend(curr, prev):
+                if prev == 0 and curr > 0:
+                    return "🚀 New"
+                elif prev == 0 and curr == 0:
+                    return "➖"
+                diff = curr - prev
+                pct = (diff / prev) * 100
+                if diff > 0:
+                    return f"▲ +{pct:.1f}%"
+                elif diff < 0:
+                    return f"▼ {abs(pct):.1f}%"
+                else:
+                    return "➖ 0%"
 
-        display_df = merged[cols_to_disp].rename(columns={
-            "Total_Sold": "Total Sold",
-            "Returned_Qty": "Returns",
-            "Exchanged_Qty": "Exchanges",
-            "Total_Revenue": "Total Revenue",
-            "Net_Yield": "Net Yield %"
-        })
-        
-        col_cfg = {
-            "Master Category": st.column_config.TextColumn("Master Category", width="small"),
-            "Total Sold": st.column_config.NumberColumn("Total Sold", format="%d"),
-            "Returns": st.column_config.NumberColumn("Returns", format="%d"),
-            "Return %": st.column_config.NumberColumn("Return %", format="%.1f%%"),
-            "Exchanges": st.column_config.NumberColumn("Exchanges", format="%d"),
-            "Exchange %": st.column_config.NumberColumn("Exchange %", format="%.1f%%"),
-            "Sold Trend": st.column_config.TextColumn(f"Sold vs Prev {clean_window}"),
-            "Total Revenue": st.column_config.NumberColumn("Total Revenue", format="৳%d"),
-            "Rev Trend": st.column_config.TextColumn(f"Rev vs Prev {clean_window}"),
-            "ASP": st.column_config.NumberColumn("ASP", format="৳%d"),
-            "ASP Trend": st.column_config.TextColumn(f"ASP vs Prev {clean_window}"),
-            "Net Yield %": st.column_config.ProgressColumn("Net Yield %", format="%.1f%%", min_value=0, max_value=100),
-        }
-        
-        if not show_master_only:
-            col_cfg["Sub Category"] = st.column_config.TextColumn("Sub Category", width="small")
-        
-        def color_trend(val):
-            if isinstance(val, str):
-                if "▲" in val or "🚀" in val:
-                    return "color: #10b981;"  # Emerald Green
-                elif "▼" in val:
-                    return "color: #ef4444;"  # Red
-            return ""
+            merged["Sold Trend"] = merged.apply(lambda x: format_trend(x["Total_Sold"], x["Prev_Sold"]), axis=1)
+            merged["Rev Trend"] = merged.apply(lambda x: format_trend(x["Total_Revenue"], x["Prev_Revenue"]), axis=1)
+            merged["ASP Trend"] = merged.apply(lambda x: format_trend(x["ASP"], x["Prev_ASP"]), axis=1)
+            
+            merged["Return %"] = (merged["Returned_Qty"] / merged["Total_Sold"].replace(0, 1)) * 100
+            merged["Exchange %"] = (merged["Exchanged_Qty"] / merged["Total_Sold"].replace(0, 1)) * 100
+            
+            merged["Master Category"] = merged["Category"].apply(lambda x: str(x).split(" - ")[0] if " - " in str(x) else str(x))
+            if not show_master_only:
+                merged["Sub Category"] = merged["Category"].apply(get_subcategory_name)
+            
+            merged = merged.sort_values(["Total_Revenue", "Master Category"], ascending=[False, True])
+            
+            cols_to_disp = ["Master Category"]
+            if not show_master_only:
+                cols_to_disp.append("Sub Category")
+            cols_to_disp.extend(["Total_Sold", "Returned_Qty", "Return %", "Exchanged_Qty", "Exchange %", "Sold Trend", "Total_Revenue", "Rev Trend", "ASP", "ASP Trend", "Net_Yield"])
 
-        def color_high_return(val):
-            if isinstance(val, (int, float)) and val > 10.0:
-                return "color: #ef4444; font-weight: bold; background-color: rgba(239, 68, 68, 0.15);"
-            return ""
+            display_df = merged[cols_to_disp].rename(columns={
+                "Total_Sold": "Total Sold",
+                "Returned_Qty": "Returns",
+                "Exchanged_Qty": "Exchanges",
+                "Total_Revenue": "Total Revenue",
+                "Net_Yield": "Net Yield %"
+            })
+            
+            col_cfg = {
+                "Master Category": st.column_config.TextColumn("Master Category", width="small"),
+                "Total Sold": st.column_config.NumberColumn("Total Sold", format="%d"),
+                "Returns": st.column_config.NumberColumn("Returns", format="%d"),
+                "Return %": st.column_config.NumberColumn("Return %", format="%.1f%%"),
+                "Exchanges": st.column_config.NumberColumn("Exchanges", format="%d"),
+                "Exchange %": st.column_config.NumberColumn("Exchange %", format="%.1f%%"),
+                "Sold Trend": st.column_config.TextColumn(f"Sold vs Prev {clean_window}"),
+                "Total Revenue": st.column_config.NumberColumn("Total Revenue", format="৳%d"),
+                "Rev Trend": st.column_config.TextColumn(f"Rev vs Prev {clean_window}"),
+                "ASP": st.column_config.NumberColumn("ASP", format="৳%d"),
+                "ASP Trend": st.column_config.TextColumn(f"ASP vs Prev {clean_window}"),
+                "Net Yield %": st.column_config.ProgressColumn("Net Yield %", format="%.1f%%", min_value=0, max_value=100),
+            }
+            
+            if not show_master_only:
+                col_cfg["Sub Category"] = st.column_config.TextColumn("Sub Category", width="small")
 
-        def color_high_exchange(val):
-            if isinstance(val, (int, float)) and val > 5.0:
-                return "color: #f97316; font-weight: bold; background-color: rgba(249, 115, 22, 0.15);"
-            return ""
+            def color_trend(val):
+                if isinstance(val, str):
+                    if "▲" in val or "🚀" in val:
+                        return "color: #10b981;"
+                    elif "▼" in val:
+                        return "color: #ef4444;"
+                return ""
 
-        styler = display_df.style
-        if hasattr(styler, "map"):
-            styled_df = styler.map(color_trend, subset=["Sold Trend", "Rev Trend", "ASP Trend"])
-            styled_df = styled_df.map(color_high_return, subset=["Return %"])
-            styled_df = styled_df.map(color_high_exchange, subset=["Exchange %"])
+            def color_high_return(val):
+                if isinstance(val, (int, float)) and val > 10.0:
+                    return "color: #ef4444; font-weight: bold; background-color: rgba(239, 68, 68, 0.15);"
+                return ""
+
+            def color_high_exchange(val):
+                if isinstance(val, (int, float)) and val > 5.0:
+                    return "color: #f97316; font-weight: bold; background-color: rgba(249, 115, 22, 0.15);"
+                return ""
+
+            styler = display_df.style
+            if hasattr(styler, "map"):
+                styled_df = styler.map(color_trend, subset=["Sold Trend", "Rev Trend", "ASP Trend"])
+                styled_df = styled_df.map(color_high_return, subset=["Return %"])
+                styled_df = styled_df.map(color_high_exchange, subset=["Exchange %"])
+            else:
+                styled_df = styler.applymap(color_trend, subset=["Sold Trend", "Rev Trend", "ASP Trend"])
+                styled_df = styled_df.applymap(color_high_return, subset=["Return %"])
+                styled_df = styled_df.applymap(color_high_exchange, subset=["Exchange %"])
+            
+            st.dataframe(styled_df, width="stretch", hide_index=True, column_config=col_cfg)
         else:
-            styled_df = styler.applymap(color_trend, subset=["Sold Trend", "Rev Trend", "ASP Trend"])
-            styled_df = styled_df.applymap(color_high_return, subset=["Return %"])
-            styled_df = styled_df.applymap(color_high_exchange, subset=["Exchange %"])
-        
-        st.dataframe(styled_df, width="stretch", hide_index=True, column_config=col_cfg)
+            st.info(f"ℹ️ No sales records found for category matrix generation in the selected timeframe ({clean_window}). Try expanding your date range in the sidebar.")
     else:
-        st.info("Insufficient data for category matrix generation.")
-
+        st.info(f"ℹ️ No active sales orders found for the selected timeframe ({clean_window}). Try selecting a broader date range in the sidebar.")

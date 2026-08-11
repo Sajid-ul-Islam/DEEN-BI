@@ -44,7 +44,7 @@ def render_deep_dive_tab(df_sales: pd.DataFrame, stock_df: pd.DataFrame, df_prev
     df_sales["_region_display"] = df_sales.apply(lambda x: get_region_display(x.get("city", ""), x.get("state", "")), axis=1)
 
     # MAIN UI LAYOUT
-    st.markdown("### 📥 Sales Data Ingestion & Analysis")
+    st.markdown("### 📥 Sales Insights & Analysis")
     st.caption("Perform high-resolution segment analysis to identify operational opportunities and regional hotspots.")
     
 
